@@ -69,8 +69,11 @@ Renames (old → new):
 
 - Currency validation on posting: a `Money` value in a different currency from the
   journal throws `CurrencyMismatch` (previously silently accepted).
-- Journal `balance` defaults to zero via an attribute default rather than a
-  save-on-created model event.
+- Journal `balance` defaults to zero via a model attribute default
+  (`protected $attributes = ['balance' => 0]`) rather than a save-on-created
+  model event.
+- `initJournal()` takes the ledger id as `?int` (the old signature declared
+  `?string` against a bigint column, flagged `@todo` in the fork).
 - Deprecated `referencesObject()` removed — use `reference()->associate($model)`.
 - Empty `Journal::remove()` stub dropped.
 - `Ledger::currentBalance()` reimplemented with SQL aggregate sums and a currency
