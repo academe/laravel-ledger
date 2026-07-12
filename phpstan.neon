@@ -1,0 +1,13 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 6
+    paths:
+        - src
+    ignoreErrors:
+        # Library traits are consumed by host apps, not by src/ itself.
+        - identifier: trait.unused
+          paths:
+              - src/Concerns/HasJournal.php
+              - src/Concerns/HasJournalTransactions.php

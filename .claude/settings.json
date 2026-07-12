@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(vendor/bin/pest tests/Feature/MigrationsTest.php)",
+      "PowerShell(vendor\\\\bin\\\\pest tests/Feature/MigrationsTest.php)",
+      "Bash(\"C:/Users/jason/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/task-brief\" \"docs/superpowers/plans/2026-07-11-laravel-journal-phase1.md\" 5)",
+      "Bash(vendor/bin/pest tests/Feature/JournalModelTest.php)",
+      "PowerShell(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\jason\\\\Documents\\\\dev\\\\laravel-journal\\\\src\\\\Models\" -Force)",
+      "Bash(vendor/bin/phpstan analyse *)",
+      "PowerShell(& \"vendor/bin/phpstan.bat\" analyse src/Models/Journal.php src/Models/JournalTransaction.php --no-progress 2>&1)",
+      "Bash(cp src/Models/Journal.php /c/Users/jason/AppData/Local/Temp/claude/c--Users-jason-Documents-dev-laravel-journal/02d86a64-b8a9-4403-b49c-4fbeee373c70/scratchpad/Journal.php.bak)",
+      "Bash(cp src/Models/JournalTransaction.php /c/Users/jason/AppData/Local/Temp/claude/c--Users-jason-Documents-dev-laravel-journal/02d86a64-b8a9-4403-b49c-4fbeee373c70/scratchpad/JournalTransaction.php.bak)",
+      "PowerShell(& \"vendor/bin/phpstan.bat\" analyse src/Models/Journal.php --no-progress 2>&1)",
+      "PowerShell(& \"vendor/bin/phpstan.bat\" analyse src/Models/JournalTransaction.php --no-progress 2>&1)",
+      "Bash(cp /c/Users/jason/AppData/Local/Temp/claude/c--Users-jason-Documents-dev-laravel-journal/02d86a64-b8a9-4403-b49c-4fbeee373c70/scratchpad/Journal.php.bak /tmp_check_journal.php 2>&1; echo ok)",
+      "Bash(find / -path \"*/illuminate/database/Eloquent/Concerns/HasUuids.php\" 2>/dev/null)",
+      "Read(//c//**)",
+      "PowerShell(& \"vendor/bin/phpstan.bat\" analyse --no-progress 2>&1)",
+      "Bash(\"C:/Users/jason/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/task-brief\" \"docs/superpowers/plans/2026-07-11-laravel-journal-phase1.md\" 6)",
+      "Bash(vendor\\\\bin\\\\pest tests/Feature/JournalModelTest.php)",
+      "Bash(vendor/bin/pest tests/Feature/PostingTest.php)",
+      "Bash(printf -- '- Task 6: complete \\(posting, currency validation, balance calcs, saved/deleted hooks; review clean; note: Carbon import changed to Illuminate\\\\\\\\Support\\\\\\\\Carbon for post_date type-correctness — verified\\)\\\\n')",
+      "Bash(\"C:/Users/jason/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/task-brief\" \"docs/superpowers/plans/2026-07-11-laravel-journal-phase1.md\" 7)",
+      "Bash(vendor\\\\bin\\\\pest tests/Feature/HasJournalTest.php --no-coverage)",
+      "Bash(xargs -I{} echo {})",
+      "Bash(printf -- '- Task 7: complete \\(HasJournal + HasJournalTransactions; fix round 1: trait generics docblocks, initJournal guard now journal\\(\\)->exists\\(\\) with regression test, documented+narrowed phpstan trait.unused ignore; review approved\\)\\\\n- Task 8 TODO: remove the 3 Ledger forward-ref @phpstan-ignore suppressions in src/Models/Journal.php\\\\n- Task 10 TODO \\(minor\\): class-string narrowing in trait relation methods + @property int|null $ledger_id on Journal to make trait docblocks provable\\\\n')",
+      "Bash(\"C:/Users/jason/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/task-brief\" \"docs/superpowers/plans/2026-07-11-laravel-journal-phase1.md\" 8)",
+      "Bash(vendor/bin/pest tests/Feature/LedgerTest.php)",
+      "Bash(\"C:/Users/jason/.claude/plugins/cache/claude-plugins-official/superpowers/6.1.1/skills/subagent-driven-development/scripts/task-brief\" \"docs/superpowers/plans/2026-07-11-laravel-journal-phase1.md\" 9)",
+      "Bash(vendor\\\\bin\\\\pest tests/Feature/TransactionGroupTest.php)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\jason\\AppData\\Local\\Temp\\claude\\c--Users-jason-Documents-dev-laravel-journal\\02d86a64-b8a9-4403-b49c-4fbeee373c70\\scratchpad"
+    ]
+  }
+}

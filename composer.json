@@ -1,0 +1,53 @@
+{
+    "name": "academe/laravel-journal",
+    "description": "Accounting journals and double-entry bookkeeping for Eloquent models",
+    "license": "MIT",
+    "keywords": ["laravel", "accounting", "journal", "ledger", "double-entry", "bookkeeping"],
+    "authors": [
+        {
+            "name": "Jason Judge",
+            "email": "jason.judge@academe.co.uk"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/database": "^12.0",
+        "illuminate/support": "^12.0",
+        "moneyphp/money": "^4.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^10.0",
+        "pestphp/pest": "^3.0",
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.13"
+    },
+    "autoload": {
+        "psr-4": {
+            "Academe\\LaravelJournal\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Academe\\LaravelJournal\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Academe\\LaravelJournal\\JournalServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "lint": "pint --test",
+        "fix": "pint",
+        "analyse": "phpstan analyse"
+    }
+}
