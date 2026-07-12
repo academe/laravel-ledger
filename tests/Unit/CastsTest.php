@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use Academe\LaravelJournal\Casts\CurrencyCast;
 use Academe\LaravelJournal\Casts\MoneyCast;
+use Academe\LaravelJournal\Casts\TagsCast;
+use Academe\LaravelJournal\Exceptions\InvalidTags;
 use Illuminate\Database\Eloquent\Model;
 use Money\Currency;
 use Money\Money;
@@ -79,4 +81,45 @@ it('falls back to key-derived column names', function () use ($model) {
     ]);
 
     expect($money)->toEqual(new Money(42, new Currency('USD')));
+});
+
+it('round-trips string-keyed scalar tags', function () use ($model) {
+    $cast = new TagsCast;
+    $tags = ['status' => 'paid', 'attempts' => 3, 'express' => true, 'rate' => 0.2];
+
+    $stored = $cast->set($model(), 'tags', $tags, []);
+
+    expect($stored)->toBeString();
+    expect($cast->get($model(), 'tags', $stored, []))->toBe($tags);
+});
+
+it('reads a stored null as an empty tag map', function () use ($model) {
+    expect((new TagsCast)->get($model(), 'tags', null, []))->toBe([]);
+});
+
+it('stores an empty tag map as null', function () use ($model) {
+    $cast = new TagsCast;
+
+    expect($cast->set($model(), 'tags', [], []))->toBeNull();
+    expect($cast->set($model(), 'tags', null, []))->toBeNull();
+});
+
+it('rejects tags that are not an array', function () use ($model) {
+    (new TagsCast)->set($model(), 'tags', 'paid', []);
+})->throws(InvalidTags::class, 'string given');
+
+it('rejects a tag list with integer keys', function () use ($model) {
+    (new TagsCast)->set($model(), 'tags', ['paid', 'express'], []);
+})->throws(InvalidTags::class, 'must be strings');
+
+it('rejects nested tag values', function () use ($model) {
+    (new TagsCast)->set($model(), 'tags', ['status' => ['paid' => true]], []);
+})->throws(InvalidTags::class, "Tag 'status'");
+
+it('drops malformed entries when reading hand-written tag rows', function () use ($model) {
+    $cast = new TagsCast;
+
+    expect($cast->get($model(), 'tags', '{"status":"paid","meta":{"a":1}}', []))
+        ->toBe(['status' => 'paid']);
+    expect($cast->get($model(), 'tags', '"not a map"', []))->toBe([]);
 });

@@ -30,7 +30,13 @@ return new class extends Migration
             $table->string('currency_code', 3);
 
             $table->text('memo')->nullable();
-            $table->json('tags')->nullable();
+
+            // jsonb so Postgres gets the binary type GIN indexes and the
+            // containment operators require (plain json supports neither);
+            // MySQL/MariaDB/SQLite render it the same as json(). Not
+            // indexed here: the package never queries tags, and useful
+            // JSON indexes are application- and driver-specific.
+            $table->jsonb('tags')->nullable();
 
             // Optional link to any model this entry references.
             $table->nullableMorphs('reference');

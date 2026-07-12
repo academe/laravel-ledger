@@ -2,15 +2,51 @@
 
 declare(strict_types=1);
 
-use Academe\LaravelJournal\Enums\LedgerType;
+use Academe\LaravelJournal\Enums\StandardLedgerType;
+use Academe\LaravelJournal\Exceptions\InvalidLedgerType;
 use Academe\LaravelJournal\Models\Ledger;
+use Academe\LaravelJournal\Tests\Fixtures\Enums\ContraAssetType;
 use Money\Currency;
 use Money\Money;
 
 it('casts the ledger type to the enum', function () {
     $ledger = Ledger::create(['name' => 'Assets', 'type' => 'asset']);
 
-    expect($ledger->fresh()->type)->toBe(LedgerType::ASSET);
+    expect($ledger->fresh()->type)->toBe(StandardLedgerType::ASSET);
+});
+
+it('stores an enum case as its code', function () {
+    $ledger = Ledger::create(['name' => 'Income', 'type' => StandardLedgerType::INCOME]);
+
+    expect($ledger->getRawOriginal('type'))->toBe('income');
+    expect($ledger->fresh()->type)->toBe(StandardLedgerType::INCOME);
+});
+
+it('rejects a ledger type code no registered enum defines', function () {
+    Ledger::create(['name' => 'Broken', 'type' => 'stock']);
+})->throws(InvalidLedgerType::class, "'stock'");
+
+it('rejects an unregistered ledger type enum', function () {
+    Ledger::create(['name' => 'Depreciation', 'type' => ContraAssetType::CONTRA_ASSET]);
+})->throws(InvalidLedgerType::class, ContraAssetType::class);
+
+it('supports application-registered ledger types', function () {
+    config(['journal.ledger_types' => [
+        StandardLedgerType::class,
+        ContraAssetType::class,
+    ]]);
+
+    $ledger = Ledger::create(['name' => 'Accumulated Depreciation', 'type' => ContraAssetType::CONTRA_ASSET]);
+
+    expect($ledger->fresh()->type)->toBe(ContraAssetType::CONTRA_ASSET);
+
+    // Credit-normal, so the balance is reported credit - debit.
+    $journal = fixtureUser('depreciation@example.com')->initJournal('USD');
+    $journal->assignToLedger($ledger);
+    $journal->credit(Money::USD(3000));
+    $journal->debit(Money::USD(500));
+
+    expect($ledger->currentBalance('USD'))->toEqual(Money::USD(2500));
 });
 
 it('relates journals assigned to the ledger', function () {

@@ -24,7 +24,7 @@ as follows:
 | `Services\Accounting::newDoubleEntryTransactionGroup()` | `TransactionGroup::make()` |
 | `Casts\MoneyCast` | `Casts\MoneyCast` (same class name, new namespace) |
 | `Casts\CurrencyCast` | `Casts\CurrencyCast` (same class name, new namespace) |
-| `Enums\LedgerType` | `Enums\LedgerType` (same class name, new namespace) |
+| `Enums\LedgerType` | `Enums\StandardLedgerType` (implements `Contracts\LedgerType`; same case names and stored values) |
 | `Exceptions\BaseException` | `Exceptions\JournalException` |
 
 All other exception class names (`JournalAlreadyExists`,

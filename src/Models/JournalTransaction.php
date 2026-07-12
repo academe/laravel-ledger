@@ -6,8 +6,10 @@ namespace Academe\LaravelJournal\Models;
 
 use Academe\LaravelJournal\Casts\CurrencyCast;
 use Academe\LaravelJournal\Casts\MoneyCast;
+use Academe\LaravelJournal\Casts\TagsCast;
 use Academe\LaravelJournal\Exceptions\PeriodClosed;
 use Academe\LaravelJournal\JournalModels;
+use Academe\LaravelJournal\PendingBalanceUpdates;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -30,7 +32,7 @@ use Money\Money;
  * @property Currency $currency
  * @property string $currency_code ISO 4217
  * @property string|null $memo
- * @property array<string, mixed>|null $tags
+ * @property array<string, bool|int|float|string> $tags
  * @property Journal $journal
  * @property Carbon $post_date
  * @property Carbon|null $updated_at
@@ -48,7 +50,7 @@ class JournalTransaction extends Model
     {
         return [
             'post_date' => 'datetime',
-            'tags' => 'array',
+            'tags' => TagsCast::class,
             'currency' => CurrencyCast::class.':currency_code',
             'credit' => MoneyCast::class.':currency_code,credit',
             'debit' => MoneyCast::class.':currency_code,debit',
@@ -75,13 +77,16 @@ class JournalTransaction extends Model
             $transaction->guardFrozenPeriod($transaction->post_date);
         });
 
-        // Keep the cached journal balance in sync.
+        // Keep the cached journal balance in sync. In the default
+        // on_commit mode the recompute is batched per journal and runs
+        // just before the surrounding transaction commits; in immediate
+        // mode (or outside any transaction) it runs right here.
         static::saved(function (self $transaction) {
-            $transaction->journal->resetCurrentBalance();
+            app(PendingBalanceUpdates::class)->record($transaction->journal);
         });
 
         static::deleted(function (self $transaction) {
-            $transaction->journal->resetCurrentBalance();
+            app(PendingBalanceUpdates::class)->record($transaction->journal);
         });
     }
 

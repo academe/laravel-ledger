@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Academe\LaravelJournal\Models;
 
-use Academe\LaravelJournal\Enums\LedgerType;
+use Academe\LaravelJournal\Casts\LedgerTypeCast;
+use Academe\LaravelJournal\Contracts\LedgerType;
+use Academe\LaravelJournal\Enums\BalanceSide;
 use Academe\LaravelJournal\JournalModels;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
@@ -15,7 +17,8 @@ use Money\Currency;
 use Money\Money;
 
 /**
- * A ledger groups journals under one of the five account types.
+ * A ledger groups journals under an account type: one of the five
+ * standard elements, or an application-registered LedgerType enum.
  *
  * @property string $name
  * @property LedgerType $type
@@ -29,7 +32,7 @@ class Ledger extends Model
     protected function casts(): array
     {
         return [
-            'type' => LedgerType::class,
+            'type' => LedgerTypeCast::class,
         ];
     }
 
@@ -58,8 +61,9 @@ class Ledger extends Model
 
     /**
      * Sum all transactions in the given currency across the ledger's
-     * journals. Asset and expense ledgers report debit - credit;
-     * liability, equity, and income ledgers report credit - debit.
+     * journals. Debit-normal ledger types (asset, expense) report
+     * debit - credit; credit-normal types (liability, equity, income)
+     * report credit - debit.
      */
     public function currentBalance(Currency|string $currency): Money
     {
@@ -81,9 +85,9 @@ class Ledger extends Model
             $currency,
         );
 
-        return match ($this->type) {
-            LedgerType::ASSET, LedgerType::EXPENSE => $debit->subtract($credit),
-            default => $credit->subtract($debit),
+        return match ($this->type->normalBalance()) {
+            BalanceSide::Debit => $debit->subtract($credit),
+            BalanceSide::Credit => $credit->subtract($debit),
         };
     }
 
@@ -117,6 +121,10 @@ class Ledger extends Model
      * journal in this ledger, in one database transaction. Journals are
      * iterated in id order, a documented, production-safe contract
      * callers can rely on.
+     *
+     * If the range reaches any member journal's opening-balance
+     * checkpoint, that journal throws CheckpointNotRemovable and the
+     * whole bulk removal rolls back.
      *
      * @return int the total number of checkpoints removed
      */

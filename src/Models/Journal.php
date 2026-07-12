@@ -6,6 +6,7 @@ namespace Academe\LaravelJournal\Models;
 
 use Academe\LaravelJournal\Casts\CurrencyCast;
 use Academe\LaravelJournal\Casts\MoneyCast;
+use Academe\LaravelJournal\Exceptions\CheckpointNotRemovable;
 use Academe\LaravelJournal\Exceptions\CurrencyMismatch;
 use Academe\LaravelJournal\Exceptions\InvalidCheckpointDate;
 use Academe\LaravelJournal\JournalModels;
@@ -212,7 +213,15 @@ class Journal extends Model
      * Reopen workflow: removeCheckpointsSince() -> post corrections ->
      * checkpoint() again (fresh sums are computed on re-checkpoint).
      *
+     * A checkpoint with non-zero totals that precedes every transaction
+     * in the journal is a brought-forward starting point (an opening
+     * balance seeded without underlying transaction rows): its totals
+     * cannot be recomputed, so it is never removed.
+     *
      * @return int the number of checkpoints removed
+     *
+     * @throws CheckpointNotRemovable when the range includes the
+     *                                journal's opening-balance checkpoint
      */
     public function removeCheckpointsSince(CarbonInterface|string $date): int
     {
@@ -222,6 +231,27 @@ class Journal extends Model
 
         return DB::transaction(function () use ($dateString): int {
             $this->newQuery()->lockForUpdate()->findOrFail($this->getKey());
+
+            $earliest = $this->checkpoints()
+                ->orderBy('checkpoint_date')
+                ->first();
+
+            if ($earliest !== null
+                && $earliest->checkpoint_date->toDateString() >= $dateString
+                && ! ($earliest->debit_total->isZero() && $earliest->credit_total->isZero())
+                && ! $this->transactions()
+                    ->where('currency_code', $this->currency_code)
+                    ->where('post_date', '<=', $earliest->checkpoint_date->copy()->endOfDay())
+                    ->exists()
+            ) {
+                throw new CheckpointNotRemovable(sprintf(
+                    "The checkpoint at %s precedes all of journal %d's transactions; "
+                        ."it is the journal's starting point and its totals cannot be "
+                        .'recomputed. Remove checkpoints after it only.',
+                    $earliest->checkpoint_date->toDateString(),
+                    $this->id,
+                ));
+            }
 
             $removed = $this->checkpoints()
                 ->where('checkpoint_date', '>=', $dateString)

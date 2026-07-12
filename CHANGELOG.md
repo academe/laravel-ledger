@@ -15,6 +15,37 @@
 - `JournalCheckpoint` model, `journal.models.checkpoint` config key,
   `journals.locked_until` column, `PeriodClosed` and
   `InvalidCheckpointDate` exceptions.
+- Opening-balance protection: `removeCheckpointsSince()` throws the new
+  `CheckpointNotRemovable` rather than delete a checkpoint with
+  non-zero totals dated before every transaction in its journal — such
+  a checkpoint is a seeded brought-forward starting point whose totals
+  cannot be recomputed.
+- Opinionated tags: `TagsCast` constrains `journal_transactions.tags`
+  to a flat map of string keys and scalar values, throwing the new
+  `InvalidTags` on lists, nested arrays, or objects. A stored `NULL`
+  reads as `[]` and an empty map is stored as `NULL`. The column is now
+  `jsonb` (real `jsonb` on Postgres; unchanged rendering elsewhere).
+- Extensible ledger types: `Contracts\LedgerType` (a `BackedEnum` with
+  `normalBalance(): BalanceSide`), the `journal.ledger_types` config
+  registry, and the `LedgerTypeCast` that resolves stored codes through
+  it. Applications can register their own string-backed enums (for
+  example contra-accounts) alongside the standard five;
+  `Ledger::currentBalance()` now signs its result from
+  `normalBalance()` instead of matching concrete enum cases.
+  `InvalidLedgerType` is thrown for unknown codes or unregistered
+  enums.
+- Batched balance-cache updates: the `journal.balance_update` config key
+  (default `'on_commit'`) defers the cached `journals.balance` recompute
+  until just before the surrounding database transaction commits, so bulk
+  postings recompute each journal once instead of once per entry. Set it
+  to `'immediate'` for the previous per-write behaviour.
+
+### Changed
+
+- With the default `'on_commit'` mode, the cached `journals.balance`
+  column is stale while the writing transaction is still open (the
+  computed balance methods remain accurate throughout). Standalone
+  postings outside a transaction are unaffected.
 
 ## 1.0.0 - Unreleased
 

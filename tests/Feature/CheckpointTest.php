@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Academe\LaravelJournal\Exceptions\CheckpointNotRemovable;
 use Academe\LaravelJournal\Exceptions\InvalidCheckpointDate;
 use Academe\LaravelJournal\Exceptions\PeriodClosed;
 use Academe\LaravelJournal\Models\JournalCheckpoint;
@@ -126,6 +127,61 @@ it('removal is inclusive of the given date and returns zero when nothing matches
 
     expect($journal->removeCheckpointsSince(now()->subDays(10)))->toBe(1);
     expect($journal->fresh()->locked_until)->toBeNull();
+});
+
+it('refuses to remove an opening-balance checkpoint that precedes all transactions', function () {
+    $journal = makeUserJournal();
+
+    // Brought-forward starting point: totals seeded directly, with no
+    // underlying transaction rows to recompute them from.
+    $journal->checkpoints()->create([
+        'checkpoint_date' => now()->subDays(30)->toDateString(),
+        'debit_total' => Money::USD(0),
+        'credit_total' => Money::USD(25000),
+    ]);
+    $journal->locked_until = now()->subDays(30);
+    $journal->save();
+
+    $journal->credit(Money::USD(500), 'first real entry', now()->subDays(5));
+
+    expect(fn () => $journal->removeCheckpointsSince(now()->subDays(30)))
+        ->toThrow(CheckpointNotRemovable::class);
+
+    expect($journal->checkpoints()->count())->toBe(1);
+    expect($journal->fresh()->locked_until->toDateString())
+        ->toBe(now()->subDays(30)->toDateString());
+});
+
+it('removes later checkpoints while protecting the opening balance', function () {
+    $journal = makeUserJournal();
+
+    $journal->checkpoints()->create([
+        'checkpoint_date' => now()->subDays(30)->toDateString(),
+        'debit_total' => Money::USD(0),
+        'credit_total' => Money::USD(25000),
+    ]);
+    $journal->locked_until = now()->subDays(30);
+    $journal->save();
+
+    $journal->credit(Money::USD(500), null, now()->subDays(15));
+    $later = $journal->checkpoint(now()->subDays(10));
+
+    // Later checkpoints build incrementally on the seeded opening totals.
+    expect($later->credit_total)->toEqual(Money::USD(25500));
+
+    // Removing back to the later checkpoint is fine...
+    expect($journal->removeCheckpointsSince(now()->subDays(10)))->toBe(1);
+    expect($journal->fresh()->locked_until->toDateString())
+        ->toBe(now()->subDays(30)->toDateString());
+
+    // ...but a range reaching the opening balance throws before
+    // removing anything.
+    $journal->checkpoint(now()->subDays(10));
+
+    expect(fn () => $journal->removeCheckpointsSince(now()->subDays(30)))
+        ->toThrow(CheckpointNotRemovable::class);
+
+    expect($journal->checkpoints()->count())->toBe(2);
 });
 
 it('enforces the unique journal/date constraint at the database level', function () {

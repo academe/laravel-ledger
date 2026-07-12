@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Academe\LaravelJournal\Exceptions\CurrencyMismatch;
+use Academe\LaravelJournal\Exceptions\InvalidTags;
 use Academe\LaravelJournal\Models\JournalTransaction;
 use Money\Currency;
 use Money\Money;
@@ -90,3 +91,28 @@ it('stamps posts with the transaction group when given', function () {
 
     expect($transaction->transaction_group)->toBe('abc-123');
 });
+
+it('persists tags as a string-keyed scalar map, with an empty map stored as null', function () {
+    $journal = makeUserJournal();
+    $transaction = $journal->credit(1000);
+
+    expect($transaction->tags)->toBe([]);
+    expect($transaction->getRawOriginal('tags'))->toBeNull();
+
+    $transaction->tags = ['status' => 'paid', 'attempts' => 2];
+    $transaction->save();
+
+    expect($transaction->fresh()->tags)->toBe(['status' => 'paid', 'attempts' => 2]);
+
+    $transaction->tags = [];
+    $transaction->save();
+
+    expect($transaction->fresh()->getRawOriginal('tags'))->toBeNull();
+    expect($transaction->fresh()->tags)->toBe([]);
+});
+
+it('rejects abusive tag shapes on assignment', function () {
+    $transaction = makeUserJournal()->credit(1000);
+
+    $transaction->tags = ['nested' => ['not' => 'allowed']];
+})->throws(InvalidTags::class);

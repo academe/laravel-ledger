@@ -16,8 +16,9 @@ return new class extends Migration
 
             $table->string('name');
 
-            // One of the LedgerType enum values:
-            // 'asset', 'liability', 'equity', 'income', 'expense'.
+            // A code from an enum registered in journal.ledger_types;
+            // StandardLedgerType defines 'asset', 'liability', 'equity',
+            // 'income', and 'expense'.
             $table->string('type', 30);
         });
     }

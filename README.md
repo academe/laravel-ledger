@@ -71,11 +71,27 @@ $balance = $user->journal->currentBalance(); // Money::USD(2500)
   amount: `JournalTransaction::$amount` returns the entry as a single signed
   `Money` value (a credit as positive, a debit as negative). Internally
   they're kept in separate `credit` and `debit` columns.
-- `journals.balance` is a **cached column** kept in sync automatically:
-  every time a `JournalTransaction` is saved or deleted, the owning
-  journal's balance is recomputed and re-saved. The cached value equals
-  `totalBalance()` (it includes future-dated transactions), not
+- `journals.balance` is a **cached column** kept in sync automatically
+  whenever a `JournalTransaction` is saved or deleted. The cached value
+  equals `totalBalance()` (it includes future-dated transactions), not
   `currentBalance()`.
+- **When** the cache is recomputed is configurable via
+  `journal.balance_update`:
+  - `'on_commit'` (the default): recomputes are batched per journal and run
+    just before the surrounding database transaction commits — still inside
+    it, so the cache commits atomically with the entries it reflects. A bulk
+    import of 100 entries in one transaction costs one recompute, not 100.
+    The trade-off: while your own transaction is still open, the cached
+    column reads stale; the computed methods (`currentBalance()`,
+    `balanceOn()`, `totalBalance()`) are always accurate.
+  - `'immediate'`: recomputes synchronously on every save/delete, so the
+    cached column is never stale inside your own transaction, at the cost
+    of one recompute per entry.
+  - Running under Laravel Octane? Add
+    `Academe\LaravelJournal\PendingBalanceUpdates::class` to
+    `config('octane.flush')` so the batching state is reset between
+    requests. Avoid mutating `$transaction->journal` without saving it
+    yourself — the deferred recompute persists that instance.
 - After posting, the in-memory `$journal` instance's `balance` property is
   stale — the recompute happens on the model that was fetched from the
   database inside the posting call, not on the instance you're holding.
@@ -130,6 +146,26 @@ class Product extends Model
 $product->journalTransactions; // Collection<JournalTransaction>
 ```
 
+## Tags
+
+Each transaction has a `tags` attribute: a flat map of string keys to
+scalar values, for labelling entries (`['source' => 'import',
+'batch' => 42]`). The shape is deliberately opinionated — tags are labels,
+not a document store — so lists, nested arrays, and objects are rejected
+with `InvalidTags` on assignment. Reading always gives you an array (an
+empty tag set is stored as `NULL` and reads as `[]`):
+
+```php
+$transaction->tags = ['status' => 'paid', 'attempts' => 2];
+$transaction->save();
+
+$transaction->fresh()->tags; // ['status' => 'paid', 'attempts' => 2]
+```
+
+The package never queries tags itself; if you filter on them, add a
+driver-appropriate JSON index in your application (the column is `jsonb`
+on Postgres).
+
 ## Double entry with TransactionGroup
 
 For proper double-entry bookkeeping — where every credit must be balanced by
@@ -171,7 +207,12 @@ amount is zero or negative.
 ## Ledgers
 
 Journals can optionally be grouped under a `Ledger`, typed by the
-`LedgerType` enum (`asset`, `liability`, `equity`, `income`, `expense`).
+`StandardLedgerType` enum (`asset`, `liability`, `equity`, `income`,
+`expense`) — the five elements of the accounting equation, universal across
+UK GAAP, IFRS, and US GAAP. Each type declares its normal balance side
+(`Contracts\LedgerType::normalBalance()`), which is all the balance
+arithmetic depends on; you can register your own string-backed enums in the
+`journal.ledger_types` config array to add types such as contra-accounts.
 Ledgers aren't required — plenty of use cases only need a single journal's
 running balance. Three common scenarios, from simplest to most rigorous:
 
@@ -210,17 +251,18 @@ TransactionGroup::make()
 ### C. Ledger-enforced double entry
 
 Assign journals to typed ledgers, and `Ledger::currentBalance()` gives you a
-SQL-aggregated balance across every journal in that ledger. Assets and
-expenses report **debit − credit**; liabilities, equity, and income report
-**credit − debit** — so, kept balanced, total assets always equal total
-liabilities plus equity plus income minus expenses:
+SQL-aggregated balance across every journal in that ledger. Debit-normal
+types (assets, expenses) report **debit − credit**; credit-normal types
+(liabilities, equity, income) report **credit − debit** — so, kept balanced,
+total assets always equal total liabilities plus equity plus income minus
+expenses:
 
 ```php
-use Academe\LaravelJournal\Enums\LedgerType;
+use Academe\LaravelJournal\Enums\StandardLedgerType;
 use Academe\LaravelJournal\Models\Ledger;
 
-$assetsLedger = Ledger::create(['name' => 'Assets', 'type' => LedgerType::ASSET]);
-$incomeLedger = Ledger::create(['name' => 'Income', 'type' => LedgerType::INCOME]);
+$assetsLedger = Ledger::create(['name' => 'Assets', 'type' => StandardLedgerType::ASSET]);
+$incomeLedger = Ledger::create(['name' => 'Income', 'type' => StandardLedgerType::INCOME]);
 
 $cashJournal = CompanyAccount::create(['name' => 'Cash'])
     ->initJournal('USD')
@@ -286,11 +328,22 @@ A `TransactionGroup::commit()` that touches a locked journal rolls back
 entirely: the whole group fails with `TransactionCouldNotBeProcessed`, and
 `getPrevious()` on that exception returns the underlying `PeriodClosed`.
 
+The freeze is enforced through the Eloquent models (deliberately — no
+database triggers to maintain across drivers), so writes that bypass them,
+such as `DB::table(...)` inserts or bulk query-builder updates, are not
+guarded. Route all journal writes through the package models.
+
 ### Reopening a period
 
 ```php
 $removed = $journal->removeCheckpointsSince('2026-01-01');
 ```
+
+One checkpoint can never be removed: an **opening balance** — a checkpoint
+with non-zero totals dated before every transaction in its journal (seeded
+directly as a brought-forward starting point, e.g. when migrating from
+another system). Its totals exist nowhere else, so a removal range that
+reaches it throws `CheckpointNotRemovable` before deleting anything.
 
 `Journal::removeCheckpointsSince(CarbonInterface|string $date): int` deletes
 every checkpoint dated on or after the given date (inclusive) and returns how
@@ -357,24 +410,26 @@ return [
         'transaction' => Academe\LaravelJournal\Models\JournalTransaction::class,
         'checkpoint' => Academe\LaravelJournal\Models\JournalCheckpoint::class,
     ],
+
+    // When to recompute the cached journals.balance column:
+    // 'on_commit' (default) batches the recompute — once per journal,
+    // just before the surrounding transaction commits; 'immediate'
+    // recomputes on every transaction save/delete.
+    'balance_update' => 'on_commit',
 ];
 ```
 
 Set `models.ledger`, `models.journal`, `models.transaction`, or
 `models.checkpoint` to your own subclasses if you need to add scopes, casts,
-or relations of your own.
+or relations of your own. See "How it works" above for the
+`balance_update` trade-offs.
 
 ## Roadmap
 
 Deliberately out of scope for now and planned as follow-up work:
 
-- **Model improvements** — reworking how transaction tags are stored, and
-  adding a general-purpose morph on `journal_transactions` so an entry can
-  point at more than one kind of related model.
-- **Checkpoint extensions** — ledger-level rollup rows, database triggers
-  enforcing the freeze at the schema layer (rather than only through Eloquent
-  model events), and archiving or pruning of old transaction rows once
-  they're safely behind a checkpoint.
+- **Checkpoint extensions** — ledger-level rollup rows, and archiving or
+  pruning of old transaction rows once they're safely behind a checkpoint.
 
 ## Licence
 
