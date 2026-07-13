@@ -12,6 +12,45 @@ This package is a modernised, journal-centric conversion of
 fork of the original [scottlaurent/accounting](https://github.com/scottlaurent/accounting)
 package. If you're upgrading from either of those, see [UPGRADE.md](UPGRADE.md).
 
+## Why this package
+
+- **Journal-first, not chart-of-accounts-first.** Attach a journal to any
+  Eloquent model with one trait and start posting. There is no world model
+  to adopt — no mandatory chart of accounts, entities, or fiscal calendar.
+  Ledgers, enforced double entry, and period locking layer on only when you
+  need them (see [the three scenarios](#ledgers) below).
+- **`moneyphp/money` as the public API.** Amounts go in and come out as
+  `Money` value objects; storage is integer minor units. No floats and no
+  decimal strings in your application code, and posting the wrong currency
+  to a journal fails loudly rather than corrupting a balance.
+- **Checkpoints: fast balances and closed periods in one mechanism.** A
+  checkpoint stores a journal's cumulative totals through a date and locks
+  the period behind it. Balance queries start from the nearest checkpoint
+  and scan only what's posted since — a journal with ten years of history
+  answers as fast as one with ten days — and the entries behind a
+  checkpoint can no longer be edited or deleted.
+- **Scales with your rigour.** The same tables serve a single wallet's
+  running balance, manual double entry between journals, and
+  ledger-enforced double entry across the full accounting equation —
+  adopt each level as your application grows into it.
+
+## Structure at a glance
+
+```mermaid
+erDiagram
+    OWNER_MODEL ||--o| JOURNAL : owns
+    LEDGER |o--o{ JOURNAL : groups
+    JOURNAL ||--o{ JOURNAL_TRANSACTION : contains
+    JOURNAL ||--o{ JOURNAL_CHECKPOINT : seals
+    JOURNAL_TRANSACTION }o--o| REFERENCE_MODEL : references
+```
+
+Any model can own a journal (the `HasJournal` owner morph); transactions can
+point back at any other model — an invoice, an order, a product — via their
+own `reference` morph; checkpoints store a journal's cumulative totals and
+lock the period behind them; and journals may — but don't have to — be
+grouped under typed ledgers for double-entry reporting.
+
 ## Requirements
 
 - PHP 8.2+
@@ -105,12 +144,45 @@ $balance = $user->journal->currentBalance(); // Money::USD(2500)
   custom transaction model may opt into `SoftDeletes`; the packaged
   `JournalTransaction` model does not use it.
 
+### Why journals are owned by models
+
+The `journals` table stores no name and no description — a journal's
+identity is entirely delegated to its owner. The `owner` morph is
+non-nullable and unique per (`owner_type`, `owner_id`) pair, so the
+relationship is strictly one-to-one: a `journals` row means nothing on its
+own; it is "the journal of `User` #42". The journal contributes only the
+bookkeeping state — currency, cached balance, transactions, checkpoints —
+while the name, the description, who may see it, and when it is created or
+archived all live on the owner, where your application already manages
+those concerns.
+
+Owners tend to fall into two camps:
+
+- **Domain objects that naturally have financial state** — the design's
+  sweet spot. A `User` with an account balance, a `Wallet`, a `GiftCard`
+  with remaining value, an `Order` accruing charges, a driver owed
+  payouts. The journal is the answer to "where did this thing's balance
+  come from?", reached from the object you already have in hand:
+  `$user->journal->currentBalance()`.
+- **Stand-in models for pure accounting accounts.** An account that isn't
+  a domain object — Cash, Sales, Accounts Receivable — is a small model
+  whose rows exist to own journals; that's what `CompanyAccount` is doing
+  in the ledger examples below. This is the honest cost of the
+  journal-first design: where a chart-of-accounts-first package hands you
+  free-standing named accounts, here a named account is a one-line model
+  plus a row.
+
+One consequence of the unique index: a model that needs several journals —
+a multi-currency wallet, say — can't own them all directly. Introduce a
+child model (one row per currency, for example) and hang one journal off
+each.
+
 ## Balances
 
 `Academe\LaravelJournal\Models\Journal` exposes:
 
 | Method | Meaning |
-|---|---|
+| --- | --- |
 | `currentBalance()` | Balance as of now, excluding future-dated transactions. |
 | `balanceOn($date)` | Balance at the end of the given day (a `CarbonInterface`). |
 | `totalBalance()` | Balance across *all* transactions, including future-dated ones. |
@@ -204,6 +276,16 @@ post date: `addTransaction($journal, 'credit', $money, $memo, $reference, $postD
 other than `'credit'` or `'debit'`, and `InvalidJournalEntryValue` if the
 amount is zero or negative.
 
+```mermaid
+graph TD
+    make["TransactionGroup::make()"] --> add["addTransaction(...) for each leg"]
+    add --> commit{"commit()"}
+    commit -->|"credits != debits"| unequal["throws DebitsAndCreditsDoNotEqual<br/>nothing written"]
+    commit -->|"balanced"| tx["all entries written in one DB transaction,<br/>stamped with the same group UUID"]
+    tx -->|"any entry fails, e.g. PeriodClosed"| rollback["whole group rolls back:<br/>TransactionCouldNotBeProcessed"]
+    tx -->|"success"| done["group UUID returned"]
+```
+
 ## Ledgers
 
 Journals can optionally be grouped under a `Ledger`, typed by the
@@ -285,6 +367,68 @@ $incomeLedger->currentBalance('USD'); // Money::USD(9900)
 `Money\Currency` instance, and only sums transactions in that currency —
 mixed-currency journals under the same ledger are kept separate.
 
+### Custom ledger types
+
+`journal.ledger_types` is a registry of enum classes, not a single class to
+swap out. To add types beyond the standard five, define a string-backed
+enum implementing `Academe\LaravelJournal\Contracts\LedgerType` — its one
+method, `normalBalance()`, is all the balance arithmetic depends on:
+
+```php
+use Academe\LaravelJournal\Contracts\LedgerType;
+use Academe\LaravelJournal\Enums\BalanceSide;
+
+enum ContraAssetType: string implements LedgerType
+{
+    case CONTRA_ASSET = 'contra-asset';
+
+    public function normalBalance(): BalanceSide
+    {
+        return BalanceSide::Credit; // asset-side account, credit-normal
+    }
+}
+```
+
+Then append it to the registry in `config/journal.php` (publish with
+`--tag=journal-config` if you haven't already):
+
+```php
+'ledger_types' => [
+    Academe\LaravelJournal\Enums\StandardLedgerType::class,
+    App\Enums\ContraAssetType::class,
+],
+```
+
+From there it behaves like any standard type — `Ledger::create(['name' =>
+'Accumulated Depreciation', 'type' => ContraAssetType::CONTRA_ASSET])` —
+and `Ledger::currentBalance()` signs its result from `normalBalance()`
+with no further special-casing.
+
+Things to know:
+
+- The enum's **backing value is the code stored** in `journal_ledgers.type`
+  — a plain string column capped at 30 characters, so keep codes within
+  that.
+- **Codes must be unique across every registered enum.** On read, the
+  first registered enum that defines the stored code wins.
+- The registry is enforced in both directions: assigning a case from an
+  unregistered enum throws `InvalidLedgerType` at write time, and reading
+  a row whose stored code no registered enum defines throws it too.
+- **Don't strand stored codes.** Every code already stored in
+  `journal_ledgers.type` must resolve through some registered enum, or
+  reading those rows throws `InvalidLedgerType` — so don't drop
+  `StandardLedgerType` from the array while standard-typed rows exist.
+- **Replacing `StandardLedgerType` entirely is supported.** Nothing in the
+  package references the standard enum concretely — behaviour flows through
+  the `LedgerType` interface — so a registry containing only your own enum
+  is fine, provided it defines every stored code (redeclare the standard
+  backing values, or migrate the column first) and keeps `normalBalance()`
+  semantically honest for any code it inherits: redefining `asset` as
+  credit-normal silently flips the sign of every existing asset ledger's
+  balance. One enum owning all your types is also the clean way to add
+  app-level methods such as `label()`, since PHP enums are final and can't
+  be extended.
+
 ## Checkpoints: fast balances and closed periods
 
 Every balance method — `currentBalance()`, `totalBalance()`, `balanceOn($date)`,
@@ -296,6 +440,13 @@ checkpoint at or before the date in question and scans only the transactions
 posted after it. This is entirely internal — no method signatures change,
 and existing application code that never calls `checkpoint()` behaves exactly
 as before.
+
+```mermaid
+graph LR
+    closed["Jan - Mar transactions<br/>CLOSED: create/update/delete<br/>throws PeriodClosed"] --- cp[("Checkpoint 31 Mar<br/>cumulative debit and<br/>credit totals stored")]
+    cp --- open["Apr onward transactions<br/>OPEN: posting as normal"]
+    cp -. "balance queries start from the stored<br/>totals and scan only the open tail" .-> open
+```
 
 ### Creating a checkpoint
 
@@ -430,6 +581,14 @@ Deliberately out of scope for now and planned as follow-up work:
 
 - **Checkpoint extensions** — ledger-level rollup rows, and archiving or
   pruning of old transaction rows once they're safely behind a checkpoint.
+- **Open-item assignment and clearing** — allocating settling entries
+  (receipts, payments) against outstanding ones (invoices, bills):
+  partial allocation, FIFO bulk assignment, and open-item/aging queries.
+  An assignment is a new row *about* existing transactions rather than an
+  edit to them, so clearing an invoice that sits behind a checkpoint
+  composes cleanly with closed periods. Leaning towards shipping this as a
+  companion package layered on top of this one, keeping the core to pure
+  bookkeeping mechanics.
 
 ## Licence
 
