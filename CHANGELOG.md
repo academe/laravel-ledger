@@ -39,9 +39,23 @@
   until just before the surrounding database transaction commits, so bulk
   postings recompute each journal once instead of once per entry. Set it
   to `'immediate'` for the previous per-write behaviour.
+- Journal display naming: opt-in `Contracts\NamesJournal` interface for
+  owner models plus `Journal::displayName()` (owner name, else
+  `{type} #{owner_id}`, else `journal #{id}`), used wherever the
+  package names a journal in messages.
+- Structured exception data: `PeriodClosed` carries `$journal`,
+  `$lockedUntil`, and `$postDate` as readonly properties;
+  `CurrencyMismatch` carries `$amountCurrency` and `$journalCurrency`.
+  `TransactionCouldNotBeProcessed` now appends its cause's message
+  (`... could not be processed: Journal "VAT owed" is closed ...`);
+  `getPrevious()` remains the structured route.
 
 ### Changed
 
+- `CurrencyMismatch::__construct()` now takes the two `Money\Currency`
+  values (amount, journal) before the optional message; `PeriodClosed`
+  (new in this release) requires its journal and dates. Code that only
+  catches these exceptions is unaffected.
 - With the default `'on_commit'` mode, the cached `journals.balance`
   column is stale while the writing transaction is still open (the
   computed balance methods remain accurate throughout). Standalone

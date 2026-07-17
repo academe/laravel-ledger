@@ -87,6 +87,71 @@ it('rolls back a transaction group touching a closed period', function () {
 
     expect($caught)->toBeInstanceOf(TransactionCouldNotBeProcessed::class);
     expect($caught->getPrevious())->toBeInstanceOf(PeriodClosed::class);
+    expect($caught->getMessage())
+        ->toContain('could not be processed: ')
+        ->toContain('is closed through');
     expect(JournalTransaction::count())->toBe(0);
     expect($books->incomeJournal->fresh()->balance)->toEqual(Money::USD(0));
+});
+
+it('carries structured data when creating into a closed period', function () {
+    $journal = makeUserJournal();
+    $journal->checkpoint(now()->subDays(5));
+
+    try {
+        $journal->credit(Money::USD(100), 'backdated', now()->subDays(10));
+        $this->fail('PeriodClosed was not thrown.');
+    } catch (PeriodClosed $e) {
+        expect($e->journal->is($journal))->toBeTrue();
+        expect($e->lockedUntil->toDateString())->toBe(now()->subDays(5)->toDateString());
+        expect($e->postDate->toDateString())->toBe(now()->subDays(10)->toDateString());
+    }
+});
+
+it('carries structured data when updating a frozen transaction', function () {
+    $journal = makeUserJournal();
+    $transaction = $journal->credit(Money::USD(100), null, now()->subDays(10));
+    $journal->checkpoint(now()->subDays(5));
+
+    try {
+        $transaction->memo = 'rewriting history';
+        $transaction->save();
+        $this->fail('PeriodClosed was not thrown.');
+    } catch (PeriodClosed $e) {
+        expect($e->journal->is($journal))->toBeTrue();
+        expect($e->lockedUntil->toDateString())->toBe(now()->subDays(5)->toDateString());
+        expect($e->postDate->toDateString())->toBe(now()->subDays(10)->toDateString());
+    }
+});
+
+it('carries structured data when deleting a frozen transaction', function () {
+    $journal = makeUserJournal();
+    $transaction = $journal->credit(Money::USD(100), null, now()->subDays(10));
+    $journal->checkpoint(now()->subDays(5));
+
+    try {
+        $transaction->delete();
+        $this->fail('PeriodClosed was not thrown.');
+    } catch (PeriodClosed $e) {
+        expect($e->journal->is($journal))->toBeTrue();
+        expect($e->lockedUntil->toDateString())->toBe(now()->subDays(5)->toDateString());
+        expect($e->postDate->toDateString())->toBe(now()->subDays(10)->toDateString());
+    }
+});
+
+it('names the journal through the owner in the PeriodClosed message', function () {
+    $journal = makeUserJournal(); // User owner, no NamesJournal: "User #{id}"
+    $journal->checkpoint(now()->subDays(5));
+
+    try {
+        $journal->credit(Money::USD(100), null, now()->subDays(10));
+        $this->fail('PeriodClosed was not thrown.');
+    } catch (PeriodClosed $e) {
+        expect($e->getMessage())->toBe(sprintf(
+            'Journal "User #%s" is closed through %s; cannot post, change, or delete a transaction dated %s.',
+            $journal->owner_id,
+            now()->subDays(5)->toDateString(),
+            now()->subDays(10)->toDateString(),
+        ));
+    }
 });

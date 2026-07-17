@@ -6,6 +6,7 @@ namespace Academe\LaravelJournal\Models;
 
 use Academe\LaravelJournal\Casts\CurrencyCast;
 use Academe\LaravelJournal\Casts\MoneyCast;
+use Academe\LaravelJournal\Contracts\NamesJournal;
 use Academe\LaravelJournal\Exceptions\CheckpointNotRemovable;
 use Academe\LaravelJournal\Exceptions\CurrencyMismatch;
 use Academe\LaravelJournal\Exceptions\InvalidCheckpointDate;
@@ -15,6 +16,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Money\Currency;
@@ -29,7 +31,9 @@ use Money\Money;
  * @property CarbonInterface|null $locked_until
  * @property CarbonInterface $updated_at
  * @property CarbonInterface $created_at
- * @property Model $owner
+ * @property Model|null $owner
+ * @property string|null $owner_type
+ * @property int|string|null $owner_id
  * @property Ledger|null $ledger
  * @property int|null $ledger_id
  */
@@ -60,6 +64,42 @@ class Journal extends Model
     public function owner(): MorphTo
     {
         return $this->morphTo('owner');
+    }
+
+    /**
+     * A human-readable name for this journal, resolved through the owner:
+     *
+     *  1. Owner implements NamesJournal -> its journalDisplayName().
+     *  2. Owner loads but has no interface -> "{type} #{owner_id}",
+     *     where {type} is the morph alias as stored, or the class
+     *     basename when owner_type is a FQCN (no morph map assumed).
+     *  3. Owner missing or unloadable -> "journal #{id}".
+     *
+     * Lazy-loads the owner; intended for failure paths and display,
+     * not hot loops.
+     */
+    public function displayName(): string
+    {
+        $ownerClass = $this->owner_type === null
+            ? null
+            : (Relation::getMorphedModel($this->owner_type) ?? $this->owner_type);
+
+        // An owner_type that no longer resolves to a class (e.g. an
+        // unregistered morph alias) cannot be loaded: treat it like a
+        // missing owner.
+        $owner = $ownerClass !== null && class_exists($ownerClass)
+            ? $this->owner
+            : null;
+
+        if ($owner instanceof NamesJournal) {
+            return $owner->journalDisplayName();
+        }
+
+        if ($owner !== null) {
+            return class_basename((string) $this->owner_type).' #'.$this->owner_id;
+        }
+
+        return 'journal #'.$this->id;
     }
 
     /**
@@ -400,11 +440,7 @@ class Journal extends Model
     {
         if ($value instanceof Money) {
             if (! $value->getCurrency()->equals($this->currency)) {
-                throw new CurrencyMismatch(sprintf(
-                    'Amount currency %s does not match journal currency %s.',
-                    $value->getCurrency()->getCode(),
-                    $this->currency_code,
-                ));
+                throw new CurrencyMismatch($value->getCurrency(), $this->currency);
             }
 
             return $value->absolute();

@@ -165,9 +165,15 @@ error.
 This section is for existing `academe/laravel-journal` 1.0 users, not for the
 rename above. Version 1.1 adds period checkpoints — see the
 [Checkpoints section](README.md#checkpoints-fast-balances-and-closed-periods)
-in the README for the full feature. The upgrade is purely additive: no
-namespaces, class names, or method signatures change, and there is **zero
-behaviour change** until you call `checkpoint()` for the first time.
+in the README for the full feature. The upgrade is almost purely additive:
+no namespaces or class names change, and there is **zero behaviour change**
+until you call `checkpoint()` for the first time. The one signature change:
+
+- `CurrencyMismatch::__construct()` now takes
+  `(Currency $amountCurrency, Currency $journalCurrency, ?string $message = null)`.
+  Only code constructing the exception itself is affected; catching and
+  reading `getMessage()` behaves as before, and the two currencies are
+  now available as public readonly properties.
 
 What's new, in one migration: a `journal_checkpoints` table, and a nullable
 `locked_until` column added to the existing `journals` table.

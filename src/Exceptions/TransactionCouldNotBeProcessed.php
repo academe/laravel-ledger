@@ -12,10 +12,18 @@ class TransactionCouldNotBeProcessed extends JournalException
         ?string $message = null,
         ?Throwable $previous = null,
     ) {
-        parent::__construct(
-            $message ?? 'Double-entry transaction group could not be processed.',
-            0,
-            $previous,
-        );
+        if ($message === null) {
+            $message = 'Double-entry transaction group could not be processed.';
+
+            // Surface the cause in the message so plain logging of the
+            // wrapper stays informative; getPrevious() remains the
+            // structured route.
+            if ($previous !== null && $previous->getMessage() !== '') {
+                $message = 'Double-entry transaction group could not be processed: '
+                    .$previous->getMessage();
+            }
+        }
+
+        parent::__construct($message, 0, $previous);
     }
 }

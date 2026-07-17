@@ -9,8 +9,8 @@ use Academe\LaravelJournal\Exceptions\InvalidJournalEntryValue;
 use Academe\LaravelJournal\Exceptions\InvalidJournalMethod;
 use Academe\LaravelJournal\Exceptions\JournalAlreadyExists;
 use Academe\LaravelJournal\Exceptions\JournalException;
-use Academe\LaravelJournal\Exceptions\PeriodClosed;
 use Academe\LaravelJournal\Exceptions\TransactionCouldNotBeProcessed;
+use Money\Currency;
 
 it('extends JournalException with a default message', function (string $class, string $messageFragment) {
     $exception = new $class;
@@ -23,8 +23,6 @@ it('extends JournalException with a default message', function (string $class, s
     [InvalidJournalMethod::class, 'credit or debit'],
     [DebitsAndCreditsDoNotEqual::class, 'debits equal credits'],
     [TransactionCouldNotBeProcessed::class, 'could not be processed'],
-    [CurrencyMismatch::class, 'currency'],
-    [PeriodClosed::class, 'closed'],
     [InvalidCheckpointDate::class, 'after the latest'],
 ]);
 
@@ -41,4 +39,26 @@ it('chains the underlying exception on commit failure', function () {
     $exception = new TransactionCouldNotBeProcessed(previous: $original);
 
     expect($exception->getPrevious())->toBe($original);
+});
+
+it('appends the cause message to the commit-failure wrapper', function () {
+    $exception = new TransactionCouldNotBeProcessed(previous: new RuntimeException('db went away'));
+
+    expect($exception->getMessage())
+        ->toBe('Double-entry transaction group could not be processed: db went away');
+});
+
+it('keeps an explicit commit-failure message as given', function () {
+    $exception = new TransactionCouldNotBeProcessed('custom message', new RuntimeException('cause'));
+
+    expect($exception->getMessage())->toBe('custom message');
+});
+
+it('carries the mismatched currencies', function () {
+    $exception = new CurrencyMismatch(new Currency('EUR'), new Currency('USD'));
+
+    expect($exception->amountCurrency->getCode())->toBe('EUR');
+    expect($exception->journalCurrency->getCode())->toBe('USD');
+    expect($exception->getMessage())
+        ->toBe('Amount currency EUR does not match journal currency USD.');
 });

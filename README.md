@@ -479,6 +479,35 @@ A `TransactionGroup::commit()` that touches a locked journal rolls back
 entirely: the whole group fails with `TransactionCouldNotBeProcessed`, and
 `getPrevious()` on that exception returns the underlying `PeriodClosed`.
 
+`PeriodClosed` carries the facts as structured, readonly properties —
+`$journal` (the locked `Journal` instance), `$lockedUntil`, and `$postDate`
+(the offending date) — so applications can catch it and phrase their own
+user-facing message instead of parsing the exception string. The wrapper's
+message also includes the cause (`Double-entry transaction group could not
+be processed: Journal "VAT owed" is closed through 2026-03-31 ...`), so
+plain logging of the caught wrapper stays informative. `CurrencyMismatch`
+similarly carries `$amountCurrency` and `$journalCurrency`.
+
+#### Naming journals in messages
+
+Wherever the package names a journal (currently exception messages), it
+resolves a display name through the journal's owner via
+`Journal::displayName()`:
+
+1. If the owner model implements
+   `Academe\LaravelJournal\Contracts\NamesJournal` (two methods:
+   `journalDisplayName(): string` and `journalDescription(): ?string`),
+   its `journalDisplayName()` is used — e.g. `"Margaret Whitfield"`,
+   `"VAT owed"`. The interface specifies capabilities, not storage: back
+   it with a column, an accessor, whatever fits.
+2. Otherwise the fallback is `{type} #{owner_id}` — the morph alias as
+   stored in `owner_type` when the app maps one (`customer #7`), or the
+   class basename when `owner_type` is a FQCN (`Customer #7`).
+3. If the owner row is missing or unloadable: `journal #{id}`.
+
+The owner lookup only happens on failure/display paths, where one
+lazy-load query is fine.
+
 The freeze is enforced through the Eloquent models (deliberately — no
 database triggers to maintain across drivers), so writes that bypass them,
 such as `DB::table(...)` inserts or bulk query-builder updates, are not

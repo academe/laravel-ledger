@@ -169,12 +169,7 @@ class JournalTransaction extends Model
 
         foreach ($postDates as $postDate) {
             if ($postDate->lessThanOrEqualTo($lockedUntil->copy()->endOfDay())) {
-                throw new PeriodClosed(sprintf(
-                    'Journal %d is closed through %s; cannot post, change, or delete a transaction dated %s.',
-                    $journal->id,
-                    $lockedUntil->toDateString(),
-                    $postDate->toDateString(),
-                ));
+                throw new PeriodClosed($journal, $lockedUntil, $postDate);
             }
         }
     }
