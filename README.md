@@ -510,6 +510,10 @@ resolves a display name through the journal's owner via
    class basename when `owner_type` is a FQCN (`Customer #7`).
 3. If the owner row is missing or unloadable: `journal #{id}`.
 
+`Journal::description(): ?string` resolves the same way, returning the
+owner's `journalDescription()` — or null when the owner does not
+implement `NamesJournal`, has nothing more to say, or is missing.
+
 The owner lookup only happens on failure/display paths, where one
 lazy-load query is fine.
 

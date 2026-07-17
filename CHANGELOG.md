@@ -42,7 +42,8 @@
 - Journal display naming: opt-in `Contracts\NamesJournal` interface for
   owner models plus `Journal::displayName()` (owner name, else
   `{type} #{owner_id}`, else `journal #{id}`), used wherever the
-  package names a journal in messages.
+  package names a journal in messages, and `Journal::description()`
+  (the owner's `journalDescription()`, else null).
 - Structured exception data: `PeriodClosed` carries `$journal`,
   `$lockedUntil`, and `$postDate` as readonly properties;
   `CurrencyMismatch` carries `$amountCurrency` and `$journalCurrency`.

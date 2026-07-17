@@ -56,3 +56,26 @@ it('falls back to journal id when the owner type is unloadable', function () {
 
     expect($journal->displayName())->toBe('journal #'.$journal->id);
 });
+
+it('gets the description from an owner implementing NamesJournal', function () {
+    $account = Account::create(['name' => 'VAT owed']);
+    $journal = $account->initJournal('USD');
+
+    expect($journal->description())->toBe('Company account "VAT owed"');
+});
+
+it('has no description when the owner does not implement NamesJournal', function () {
+    $journal = makeUserJournal();
+
+    expect($journal->description())->toBeNull();
+});
+
+it('has no description when the owner row is missing', function () {
+    $journal = Journal::create([
+        'currency_code' => 'USD',
+        'owner_type' => User::class,
+        'owner_id' => 999,
+    ]);
+
+    expect($journal->description())->toBeNull();
+});

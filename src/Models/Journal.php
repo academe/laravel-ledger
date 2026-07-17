@@ -75,21 +75,12 @@ class Journal extends Model
      *     basename when owner_type is a FQCN (no morph map assumed).
      *  3. Owner missing or unloadable -> "journal #{id}".
      *
-     * Lazy-loads the owner; intended for failure paths and display,
+     * Lazy-loads the owner; intended internally for failure paths and display,
      * not hot loops.
      */
     public function displayName(): string
     {
-        $ownerClass = $this->owner_type === null
-            ? null
-            : (Relation::getMorphedModel($this->owner_type) ?? $this->owner_type);
-
-        // An owner_type that no longer resolves to a class (e.g. an
-        // unregistered morph alias) cannot be loaded: treat it like a
-        // missing owner.
-        $owner = $ownerClass !== null && class_exists($ownerClass)
-            ? $this->owner
-            : null;
+        $owner = $this->resolvedOwner();
 
         if ($owner instanceof NamesJournal) {
             return $owner->journalDisplayName();
@@ -100,6 +91,35 @@ class Journal extends Model
         }
 
         return 'journal #'.$this->id;
+    }
+
+    /**
+     * An optional longer description for this journal, resolved through
+     * the owner. Null when the owner does not implement NamesJournal,
+     * has nothing more to say, or is missing.
+     */
+    public function description(): ?string
+    {
+        $owner = $this->resolvedOwner();
+
+        return $owner instanceof NamesJournal
+            ? $owner->journalDescription()
+            : null;
+    }
+
+    /**
+     * The owner model, or null when the row is missing or owner_type no
+     * longer resolves to a class (e.g. an unregistered morph alias).
+     */
+    protected function resolvedOwner(): ?Model
+    {
+        $ownerClass = $this->owner_type === null
+            ? null
+            : (Relation::getMorphedModel($this->owner_type) ?? $this->owner_type);
+
+        return $ownerClass !== null && class_exists($ownerClass)
+            ? $this->owner
+            : null;
     }
 
     /**

@@ -21,6 +21,6 @@ class Account extends Model implements NamesJournal
 
     public function journalDescription(): ?string
     {
-        return null;
+        return 'Company account "'.$this->name.'"';
     }
 }
