@@ -1,5 +1,10 @@
 # Laravel Journal
 
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/academe/laravel-journal.svg?style=flat-square)](https://packagist.org/packages/academe/laravel-journal)
+[![CI](https://img.shields.io/github/actions/workflow/status/academe/laravel-ledger/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/academe/laravel-ledger/actions/workflows/ci.yml)
+[![Total Downloads](https://img.shields.io/packagist/dt/academe/laravel-journal.svg?style=flat-square)](https://packagist.org/packages/academe/laravel-journal)
+[![License](https://img.shields.io/packagist/l/academe/laravel-journal.svg?style=flat-square)](LICENSE.txt)
+
 Accounting journals and double-entry bookkeeping for Eloquent models.
 
 Give any Eloquent model its own accounting journal, post credits and debits
