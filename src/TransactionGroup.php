@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Academe\LaravelJournal;
 
+use Academe\LaravelJournal\Enums\EntryType;
 use Academe\LaravelJournal\Exceptions\DebitsAndCreditsDoNotEqual;
 use Academe\LaravelJournal\Exceptions\InvalidJournalEntryValue;
 use Academe\LaravelJournal\Exceptions\InvalidJournalMethod;
@@ -25,7 +26,7 @@ class TransactionGroup
     /**
      * @var array<int, array{
      *     journal: Journal,
-     *     method: string,
+     *     method: EntryType,
      *     money: Money,
      *     memo: string|null,
      *     reference: Model|null,
@@ -51,19 +52,22 @@ class TransactionGroup
     /**
      * Queue a credit or debit against a journal.
      *
+     * $method takes an EntryType case, or its string value ('credit' /
+     * 'debit') for backwards compatibility.
+     *
      * @throws InvalidJournalMethod
      * @throws InvalidJournalEntryValue
      */
     public function addTransaction(
         Journal $journal,
-        string $method,
+        EntryType|string $method,
         Money $money,
         ?string $memo = null,
         ?Model $reference = null,
         ?CarbonInterface $postDate = null,
     ): static {
-        if (! in_array($method, ['credit', 'debit'], true)) {
-            throw new InvalidJournalMethod;
+        if (is_string($method)) {
+            $method = EntryType::tryFrom($method) ?? throw new InvalidJournalMethod;
         }
 
         if ($money->isZero() || $money->isNegative()) {
@@ -111,12 +115,20 @@ class TransactionGroup
                 $groupUuid = (string) Str::orderedUuid();
 
                 foreach ($this->pending as $entry) {
-                    $transaction = $entry['journal']->{$entry['method']}(
-                        $entry['money'],
-                        $entry['memo'],
-                        $entry['postDate'],
-                        $groupUuid,
-                    );
+                    $transaction = match ($entry['method']) {
+                        EntryType::Credit => $entry['journal']->credit(
+                            $entry['money'],
+                            $entry['memo'],
+                            $entry['postDate'],
+                            $groupUuid,
+                        ),
+                        EntryType::Debit => $entry['journal']->debit(
+                            $entry['money'],
+                            $entry['memo'],
+                            $entry['postDate'],
+                            $groupUuid,
+                        ),
+                    };
 
                     if ($entry['reference'] !== null) {
                         $transaction->reference()->associate($entry['reference'])->save();
@@ -144,7 +156,7 @@ class TransactionGroup
         foreach ($this->pending as $entry) {
             $currencyCode = $entry['money']->getCurrency()->getCode();
 
-            if ($entry['method'] === 'credit') {
+            if ($entry['method'] === EntryType::Credit) {
                 $credits[$currencyCode] = ($credits[$currencyCode] ?? 0) + (int) $entry['money']->getAmount();
             } else {
                 $debits[$currencyCode] = ($debits[$currencyCode] ?? 0) + (int) $entry['money']->getAmount();

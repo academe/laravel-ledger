@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Academe\LaravelJournal\Enums\EntryType;
 use Academe\LaravelJournal\Exceptions\CurrencyMismatch;
 use Academe\LaravelJournal\Exceptions\DebitsAndCreditsDoNotEqual;
 use Academe\LaravelJournal\Exceptions\InvalidJournalEntryValue;
@@ -18,6 +19,30 @@ it('rejects methods other than credit or debit', function () {
     TransactionGroup::make()
         ->addTransaction($books->cashJournal, 'banana', Money::USD(100));
 })->throws(InvalidJournalMethod::class);
+
+it('accepts EntryType enum cases as the method', function () {
+    $books = companyBooks();
+
+    TransactionGroup::make()
+        ->addTransaction($books->cashJournal, EntryType::Debit, Money::USD(10000))
+        ->addTransaction($books->arJournal, EntryType::Credit, Money::USD(10000))
+        ->commit();
+
+    expect($books->cashJournal->currentBalance())
+        ->toEqual($books->arJournal->currentBalance()->multiply(-1));
+});
+
+it('normalises method strings to EntryType in the pending queue', function () {
+    $books = companyBooks();
+
+    $pending = TransactionGroup::make()
+        ->addTransaction($books->cashJournal, 'debit', Money::USD(100))
+        ->addTransaction($books->arJournal, EntryType::Credit, Money::USD(100))
+        ->pending();
+
+    expect($pending[0]['method'])->toBe(EntryType::Debit);
+    expect($pending[1]['method'])->toBe(EntryType::Credit);
+});
 
 it('rejects zero amounts', function () {
     $books = companyBooks();

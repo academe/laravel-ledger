@@ -44,6 +44,11 @@
   `{type} #{owner_id}`, else `journal #{id}`), used wherever the
   package names a journal in messages, and `Journal::description()`
   (the owner's `journalDescription()`, else null).
+- `Enums\EntryType` (`Credit`/`Debit`, string-backed as `'credit'` /
+  `'debit'`): `TransactionGroup::addTransaction()` now accepts
+  `EntryType|string`, normalising strings through the enum — unknown
+  strings still throw `InvalidJournalMethod` — and `pending()` entries
+  carry the enum in their `method` key.
 - Structured exception data: `PeriodClosed` carries `$journal`,
   `$lockedUntil`, and `$postDate` as readonly properties;
   `CurrencyMismatch` carries `$amountCurrency` and `$journalCurrency`.

@@ -266,6 +266,11 @@ $groupUuid = $group->commit();
 `addTransaction()` also accepts an optional memo, a referenced model, and a
 post date: `addTransaction($journal, 'credit', $money, $memo, $reference, $postDate)`.
 
+The method argument takes an `Academe\LaravelJournal\Enums\EntryType` case
+(`EntryType::Credit` / `EntryType::Debit`) or its string value as shown
+above — the strings are normalised to the enum internally, so both forms
+are equivalent.
+
 `commit()`:
 
 - throws `DebitsAndCreditsDoNotEqual` if the queued credits and debits don't
@@ -277,7 +282,7 @@ post date: `addTransaction($journal, 'credit', $money, $memo, $reference, $postD
 - wraps any failure in `TransactionCouldNotBeProcessed`, with the original
   exception available via `getPrevious()`.
 
-`addTransaction()` itself throws `InvalidJournalMethod` if given anything
+`addTransaction()` itself throws `InvalidJournalMethod` if given a string
 other than `'credit'` or `'debit'`, and `InvalidJournalEntryValue` if the
 amount is zero or negative.
 
