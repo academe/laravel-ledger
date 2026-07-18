@@ -333,6 +333,15 @@ graph TD
     tx -->|"success"| done["group UUID returned"]
 ```
 
+### Multiple currencies
+
+Each journal is fixed to one currency, and groups must balance within
+each currency they touch — so moving value between currencies is a
+four-leg group routed through per-currency FX clearing journals, with
+the exchange rate staying application data. The full pattern, including
+where realised and unrealised gains end up, is worked through in
+[docs/multi-currency.md](docs/multi-currency.md).
+
 ## Ledgers
 
 Journals can optionally be grouped under a `Ledger`, typed by the
