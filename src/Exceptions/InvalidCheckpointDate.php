@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Academe\LaravelJournal\Exceptions;
 
-class InvalidCheckpointDate extends JournalException
+class InvalidCheckpointDate extends JournalRuntimeException
 {
     public function __construct(string $message = 'Checkpoint date must be after the latest existing checkpoint.')
     {

@@ -9,6 +9,7 @@ use Academe\LaravelJournal\Exceptions\DebitsAndCreditsDoNotEqual;
 use Academe\LaravelJournal\Exceptions\InvalidJournalEntryValue;
 use Academe\LaravelJournal\Exceptions\InvalidJournalMethod;
 use Academe\LaravelJournal\Exceptions\TransactionCouldNotBeProcessed;
+use Academe\LaravelJournal\Exceptions\TransactionGroupNotFound;
 use Academe\LaravelJournal\Models\Journal;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
@@ -47,6 +48,56 @@ class TransactionGroup
     public static function make(): static
     {
         return new static;
+    }
+
+    /**
+     * Build the reversal of a committed transaction group: one entry
+     * per original entry with credits and debits swapped, so committing
+     * cancels the original under a new group UUID. Nothing is posted
+     * until commit() — inspect via pending(), or add further entries
+     * first.
+     *
+     * This is the closed-period-safe way to undo a group: the original
+     * entries stay untouched (they may be frozen behind a checkpoint);
+     * the reversal posts as $postDate, or as now when null.
+     *
+     * Each reversal entry keeps its original's reference model, and its
+     * memo prefixed as "Reversal: {original memo}" — or
+     * "Reversal of transaction group {uuid}" where the original had no
+     * memo.
+     *
+     * @throws TransactionGroupNotFound when no entries exist for the UUID
+     */
+    public static function reverse(
+        string $transactionGroup,
+        ?CarbonInterface $postDate = null,
+    ): static {
+        $transactionClass = app(JournalModels::class)->transaction();
+
+        $originals = $transactionClass::whereGroup($transactionGroup)
+            ->with(['journal', 'reference'])
+            ->get();
+
+        if ($originals->isEmpty()) {
+            throw new TransactionGroupNotFound($transactionGroup);
+        }
+
+        $group = new static;
+
+        foreach ($originals as $original) {
+            $group->addTransaction(
+                $original->journal,
+                $original->debit !== null ? EntryType::Credit : EntryType::Debit,
+                $original->debit ?? $original->credit,
+                $original->memo === null
+                    ? 'Reversal of transaction group '.$transactionGroup
+                    : 'Reversal: '.$original->memo,
+                $original->reference,
+                $postDate,
+            );
+        }
+
+        return $group;
     }
 
     /**

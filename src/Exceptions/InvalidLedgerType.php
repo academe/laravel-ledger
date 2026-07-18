@@ -4,4 +4,4 @@ declare(strict_types=1);
 
 namespace Academe\LaravelJournal\Exceptions;
 
-class InvalidLedgerType extends JournalException {}
+class InvalidLedgerType extends JournalLogicException {}

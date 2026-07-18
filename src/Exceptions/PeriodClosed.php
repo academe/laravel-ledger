@@ -13,7 +13,7 @@ use Carbon\CarbonInterface;
  * Carries the facts as structured properties so applications can phrase
  * their own user-facing messages instead of parsing this one.
  */
-class PeriodClosed extends JournalException
+class PeriodClosed extends JournalRuntimeException
 {
     public function __construct(
         public readonly Journal $journal,

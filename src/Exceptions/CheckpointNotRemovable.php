@@ -4,4 +4,4 @@ declare(strict_types=1);
 
 namespace Academe\LaravelJournal\Exceptions;
 
-class CheckpointNotRemovable extends JournalException {}
+class CheckpointNotRemovable extends JournalRuntimeException {}

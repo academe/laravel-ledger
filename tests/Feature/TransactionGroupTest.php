@@ -8,6 +8,7 @@ use Academe\LaravelJournal\Exceptions\DebitsAndCreditsDoNotEqual;
 use Academe\LaravelJournal\Exceptions\InvalidJournalEntryValue;
 use Academe\LaravelJournal\Exceptions\InvalidJournalMethod;
 use Academe\LaravelJournal\Exceptions\TransactionCouldNotBeProcessed;
+use Academe\LaravelJournal\Exceptions\TransactionGroupNotFound;
 use Academe\LaravelJournal\Models\JournalTransaction;
 use Academe\LaravelJournal\Tests\Fixtures\Models\Product;
 use Academe\LaravelJournal\TransactionGroup;
@@ -42,6 +43,105 @@ it('normalises method strings to EntryType in the pending queue', function () {
 
     expect($pending[0]['method'])->toBe(EntryType::Debit);
     expect($pending[1]['method'])->toBe(EntryType::Credit);
+});
+
+it('fetches the entries of a group with the whereGroup scope', function () {
+    $books = companyBooks();
+
+    $groupUuid = TransactionGroup::make()
+        ->addTransaction($books->cashJournal, EntryType::Debit, Money::USD(100))
+        ->addTransaction($books->arJournal, EntryType::Credit, Money::USD(100))
+        ->commit();
+
+    $books->cashJournal->credit(Money::USD(50), 'unrelated entry');
+
+    $entries = JournalTransaction::whereGroup($groupUuid)->get();
+
+    expect($entries)->toHaveCount(2);
+    expect($entries->pluck('transaction_group')->unique()->all())->toBe([$groupUuid]);
+});
+
+it('builds a pending reversal of a committed group without posting it', function () {
+    $books = companyBooks();
+
+    $groupUuid = TransactionGroup::make()
+        ->addTransaction($books->cashJournal, EntryType::Debit, Money::USD(9900), 'invoice paid')
+        ->addTransaction($books->incomeJournal, EntryType::Credit, Money::USD(9900))
+        ->commit();
+
+    $reversal = TransactionGroup::reverse($groupUuid);
+
+    $pending = $reversal->pending();
+    expect($pending)->toHaveCount(2);
+    expect($pending[0]['method'])->toBe(EntryType::Credit);
+    expect($pending[0]['journal']->is($books->cashJournal->fresh()))->toBeTrue();
+    expect($pending[0]['money'])->toEqual(Money::USD(9900));
+    expect($pending[0]['memo'])->toBe('Reversal: invoice paid');
+    expect($pending[1]['method'])->toBe(EntryType::Debit);
+    expect($pending[1]['memo'])->toBe('Reversal of transaction group '.$groupUuid);
+
+    // Nothing has been posted yet.
+    expect(JournalTransaction::count())->toBe(2);
+});
+
+it('commits a reversal that cancels the original group under a new uuid', function () {
+    $books = companyBooks();
+
+    $groupUuid = TransactionGroup::make()
+        ->addTransaction($books->cashJournal, EntryType::Debit, Money::USD(9900))
+        ->addTransaction($books->incomeJournal, EntryType::Credit, Money::USD(9900))
+        ->commit();
+
+    $reversalUuid = TransactionGroup::reverse($groupUuid)->commit();
+
+    expect($reversalUuid)->not->toBe($groupUuid);
+    expect(JournalTransaction::whereGroup($groupUuid)->count())->toBe(2);
+    expect(JournalTransaction::whereGroup($reversalUuid)->count())->toBe(2);
+    expect($books->cashJournal->fresh()->balance)->toEqual(Money::USD(0));
+    expect($books->incomeJournal->fresh()->balance)->toEqual(Money::USD(0));
+});
+
+it('applies an explicit post date to every reversal entry', function () {
+    $books = companyBooks();
+
+    $groupUuid = TransactionGroup::make()
+        ->addTransaction($books->cashJournal, EntryType::Debit, Money::USD(100), null, null, now()->subDays(10))
+        ->addTransaction($books->incomeJournal, EntryType::Credit, Money::USD(100), null, null, now()->subDays(10))
+        ->commit();
+
+    $postDate = now()->subDays(2);
+    $reversalUuid = TransactionGroup::reverse($groupUuid, $postDate)->commit();
+
+    $entries = JournalTransaction::whereGroup($reversalUuid)->get();
+    expect($entries)->toHaveCount(2);
+    $entries->each(fn ($entry) => expect($entry->post_date->toDateString())->toBe($postDate->toDateString()));
+});
+
+it('carries entry references over onto the reversal', function () {
+    $books = companyBooks();
+    $product = Product::create(['name' => 'Widget', 'price' => 100]);
+
+    $groupUuid = TransactionGroup::make()
+        ->addTransaction($books->cashJournal, EntryType::Debit, Money::USD(100), null, $product)
+        ->addTransaction($books->incomeJournal, EntryType::Credit, Money::USD(100), null, $product)
+        ->commit();
+
+    $reversalUuid = TransactionGroup::reverse($groupUuid)->commit();
+
+    $entries = JournalTransaction::whereGroup($reversalUuid)->get();
+    $entries->each(fn ($entry) => expect($entry->reference->is($product))->toBeTrue());
+});
+
+it('throws for a reversal of an unknown transaction group', function () {
+    $uuid = '0197fa00-0000-7000-8000-000000000000';
+
+    try {
+        TransactionGroup::reverse($uuid);
+        $this->fail('TransactionGroupNotFound was not thrown.');
+    } catch (TransactionGroupNotFound $e) {
+        expect($e->transactionGroup)->toBe($uuid);
+        expect($e->getMessage())->toContain($uuid);
+    }
 });
 
 it('rejects zero amounts', function () {

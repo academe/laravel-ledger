@@ -282,9 +282,46 @@ are equivalent.
 - wraps any failure in `TransactionCouldNotBeProcessed`, with the original
   exception available via `getPrevious()`.
 
+`DebitsAndCreditsDoNotEqual` is itself a subclass of
+`TransactionCouldNotBeProcessed`, so catching the latter covers every way
+`commit()` can fail (the unbalanced case carries no `getPrevious()` —
+nothing reached the database).
+
 `addTransaction()` itself throws `InvalidJournalMethod` if given a string
 other than `'credit'` or `'debit'`, and `InvalidJournalEntryValue` if the
 amount is zero or negative.
+
+### Fetching a group
+
+The entries committed together share the group UUID, so they can be
+retrieved together with the `whereGroup` scope:
+
+```php
+$entries = JournalTransaction::whereGroup($groupUuid)->get();
+```
+
+### Reversing a group
+
+`TransactionGroup::reverse($groupUuid)` builds the mirror image of a
+committed group — one entry per original with credits and debits swapped —
+as a new, uncommitted `TransactionGroup`:
+
+```php
+$reversal = TransactionGroup::reverse($groupUuid);
+// inspect via $reversal->pending(), or add further entries...
+$reversalUuid = $reversal->commit();
+```
+
+Nothing is posted until `commit()`. The reversal entries post as of an
+optional second argument (`reverse($groupUuid, $postDate)`), defaulting to
+now; each keeps its original's referenced model, and its memo becomes
+`Reversal: {original memo}` (or `Reversal of transaction group {uuid}` when
+the original had none). An unknown UUID throws `TransactionGroupNotFound`,
+which carries the UUID as a `$transactionGroup` property.
+
+This is the closed-period-safe way to undo a group: the original entries
+stay untouched — they may be frozen behind a checkpoint — and the
+correction lands in the open period as its own balanced group.
 
 ```mermaid
 graph TD
@@ -585,6 +622,69 @@ same way, on its own.
   checkpointing too early means late entries either get rejected by
   `PeriodClosed` or land in the wrong period's totals. Wait until a range is
   closed for good before checkpointing it.
+
+## Exceptions
+
+Everything the package throws deliberately lives under
+`Academe\LaravelJournal\Exceptions` and implements the `JournalException`
+interface, so a single `catch (JournalException $e)` covers the whole
+package (interfaces work in `catch` exactly like parent classes —
+`Throwable` itself is one).
+
+Beneath the interface, exceptions split along PHP's own
+`LogicException` / `RuntimeException` line:
+
+- **`JournalLogicException`** — developer errors: wrong code or
+  configuration. These indicate a bug to fix, not a condition to catch.
+- **`JournalRuntimeException`** — conditions a correctly-written
+  application can still hit, and may want to handle.
+
+`DebitsAndCreditsDoNotEqual` sits under
+`TransactionCouldNotBeProcessed`: an unbalanced group is one kind of
+commit failure, so catching the wrapper covers every way `commit()` can
+fail.
+
+```text
+Throwable (PHP)
+└── JournalException (interface)
+    ├── JournalLogicException (abstract, extends LogicException)
+    │   ├── InvalidJournalMethod
+    │   ├── InvalidJournalEntryValue
+    │   ├── InvalidJournalModel
+    │   ├── InvalidLedgerType
+    │   └── InvalidTags
+    └── JournalRuntimeException (abstract, extends RuntimeException)
+        ├── JournalAlreadyExists
+        ├── CurrencyMismatch
+        ├── PeriodClosed
+        ├── InvalidCheckpointDate
+        ├── CheckpointNotRemovable
+        ├── TransactionGroupNotFound
+        └── TransactionCouldNotBeProcessed
+            └── DebitsAndCreditsDoNotEqual
+```
+
+| Exception | Thrown when | Carries |
+| --- | --- | --- |
+| `JournalAlreadyExists` | `initJournal()` is called on a model that already has a journal | |
+| `CurrencyMismatch` | a posted `Money` value's currency differs from the journal's (direct `credit()`/`debit()` or inside a group commit) | `$amountCurrency`, `$journalCurrency` |
+| `InvalidJournalMethod` | `addTransaction()` is given a method string other than `'credit'` or `'debit'` | |
+| `InvalidJournalEntryValue` | `addTransaction()` is given a zero or negative amount | |
+| `DebitsAndCreditsDoNotEqual` | `commit()` is called on a group whose credits and debits don't balance within some currency | |
+| `TransactionCouldNotBeProcessed` | anything fails inside `commit()`; the whole group has rolled back | the cause, via `getPrevious()` and appended to the message |
+| `TransactionGroupNotFound` | `TransactionGroup::reverse()` is given a UUID with no entries | `$transactionGroup` |
+| `PeriodClosed` | a transaction dated in a checkpointed period is created, changed, or deleted | `$journal`, `$lockedUntil`, `$postDate` |
+| `InvalidCheckpointDate` | `checkpoint()` is dated on or before the journal's latest checkpoint | |
+| `CheckpointNotRemovable` | `removeCheckpointsSince()` would delete an opening-balance checkpoint | |
+| `InvalidLedgerType` | a stored ledger type code matches no registered enum, or a ledger is given a case from an unregistered enum | |
+| `InvalidTags` | transaction tags are not a flat map of string keys to scalar values | |
+| `InvalidJournalModel` | a `models.*` config override does not extend the package model it replaces | |
+
+Where an exception carries structured properties (all public and
+readonly), read those rather than parsing the message — messages are for
+humans and may change wording between releases. `PeriodClosed` messages
+name the journal through its owner (see
+[Naming journals in messages](#naming-journals-in-messages)).
 
 ## Configuration
 

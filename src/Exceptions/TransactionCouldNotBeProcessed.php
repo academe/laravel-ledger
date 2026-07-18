@@ -6,7 +6,7 @@ namespace Academe\LaravelJournal\Exceptions;
 
 use Throwable;
 
-class TransactionCouldNotBeProcessed extends JournalException
+class TransactionCouldNotBeProcessed extends JournalRuntimeException
 {
     public function __construct(
         ?string $message = null,

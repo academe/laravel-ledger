@@ -25,7 +25,7 @@ as follows:
 | `Casts\MoneyCast` | `Casts\MoneyCast` (same class name, new namespace) |
 | `Casts\CurrencyCast` | `Casts\CurrencyCast` (same class name, new namespace) |
 | `Enums\LedgerType` | `Enums\StandardLedgerType` (implements `Contracts\LedgerType`; same case names and stored values) |
-| `Exceptions\BaseException` | `Exceptions\JournalException` |
+| `Exceptions\BaseException` | `Exceptions\JournalException` (now an *interface* — catch it exactly as before, but extend one of the abstract bases `JournalLogicException` / `JournalRuntimeException` instead) |
 
 All other exception class names (`JournalAlreadyExists`,
 `InvalidJournalEntryValue`, `InvalidJournalMethod`,

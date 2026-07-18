@@ -4,4 +4,4 @@ declare(strict_types=1);
 
 namespace Academe\LaravelJournal\Exceptions;
 
-class InvalidJournalModel extends JournalException {}
+class InvalidJournalModel extends JournalLogicException {}

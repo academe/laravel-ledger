@@ -49,6 +49,14 @@
   `EntryType|string`, normalising strings through the enum — unknown
   strings still throw `InvalidJournalMethod` — and `pending()` entries
   carry the enum in their `method` key.
+- `JournalTransaction::whereGroup($uuid)` scope to fetch the entries
+  committed together as one transaction group.
+- Group reversal: `TransactionGroup::reverse($uuid, $postDate = null)`
+  builds the mirror image of a committed group (credits and debits
+  swapped, references kept, memos prefixed `Reversal:`) as a new
+  uncommitted group — inspect or extend it, then `commit()`. Throws
+  the new `TransactionGroupNotFound` for an unknown UUID. The
+  closed-period-safe way to undo a posted group.
 - Structured exception data: `PeriodClosed` carries `$journal`,
   `$lockedUntil`, and `$postDate` as readonly properties;
   `CurrencyMismatch` carries `$amountCurrency` and `$journalCurrency`.
@@ -58,6 +66,16 @@
 
 ### Changed
 
+- Exception hierarchy restructured: `JournalException` is now a marker
+  *interface* (extending `Throwable`) — `catch (JournalException $e)`
+  behaves as before — with two abstract bases beneath it:
+  `JournalLogicException` (`LogicException`; developer errors:
+  `InvalidJournalMethod`, `InvalidJournalEntryValue`,
+  `InvalidJournalModel`, `InvalidLedgerType`, `InvalidTags`) and
+  `JournalRuntimeException` (`RuntimeException`; everything else).
+  `DebitsAndCreditsDoNotEqual` now extends
+  `TransactionCouldNotBeProcessed`, so catching the wrapper covers
+  every way `TransactionGroup::commit()` can fail.
 - `CurrencyMismatch::__construct()` now takes the two `Money\Currency`
   values (amount, journal) before the optional message; `PeriodClosed`
   (new in this release) requires its journal and dates. Code that only

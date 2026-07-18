@@ -11,6 +11,7 @@ use Academe\LaravelJournal\Exceptions\PeriodClosed;
 use Academe\LaravelJournal\JournalModels;
 use Academe\LaravelJournal\PendingBalanceUpdates;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -128,6 +129,18 @@ class JournalTransaction extends Model
     public function reference(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    /**
+     * Scope: the entries committed together under one transaction
+     * group UUID.
+     *
+     * @param  Builder<JournalTransaction>  $query
+     * @return Builder<JournalTransaction>
+     */
+    public function scopeWhereGroup(Builder $query, string $transactionGroup): Builder
+    {
+        return $query->where('transaction_group', $transactionGroup);
     }
 
     /**

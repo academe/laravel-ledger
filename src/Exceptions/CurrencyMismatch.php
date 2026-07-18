@@ -12,7 +12,7 @@ use Money\Currency;
  * Carries both currencies as structured properties so applications can
  * phrase their own messages instead of parsing this one.
  */
-class CurrencyMismatch extends JournalException
+class CurrencyMismatch extends JournalRuntimeException
 {
     public function __construct(
         public readonly Currency $amountCurrency,

@@ -2,14 +2,20 @@
 
 declare(strict_types=1);
 
+use Academe\LaravelJournal\Exceptions\CheckpointNotRemovable;
 use Academe\LaravelJournal\Exceptions\CurrencyMismatch;
 use Academe\LaravelJournal\Exceptions\DebitsAndCreditsDoNotEqual;
 use Academe\LaravelJournal\Exceptions\InvalidCheckpointDate;
 use Academe\LaravelJournal\Exceptions\InvalidJournalEntryValue;
 use Academe\LaravelJournal\Exceptions\InvalidJournalMethod;
+use Academe\LaravelJournal\Exceptions\InvalidJournalModel;
+use Academe\LaravelJournal\Exceptions\InvalidLedgerType;
+use Academe\LaravelJournal\Exceptions\InvalidTags;
 use Academe\LaravelJournal\Exceptions\JournalAlreadyExists;
 use Academe\LaravelJournal\Exceptions\JournalException;
+use Academe\LaravelJournal\Exceptions\PeriodClosed;
 use Academe\LaravelJournal\Exceptions\TransactionCouldNotBeProcessed;
+use Academe\LaravelJournal\Exceptions\TransactionGroupNotFound;
 use Money\Currency;
 
 it('extends JournalException with a default message', function (string $class, string $messageFragment) {
@@ -61,4 +67,48 @@ it('carries the mismatched currencies', function () {
     expect($exception->journalCurrency->getCode())->toBe('USD');
     expect($exception->getMessage())
         ->toBe('Amount currency EUR does not match journal currency USD.');
+});
+
+it('is catchable through the JournalException interface', function () {
+    try {
+        throw new CheckpointNotRemovable('checkpoint is an opening balance');
+    } catch (JournalException $e) {
+        expect($e)->toBeInstanceOf(CheckpointNotRemovable::class);
+        expect($e->getMessage())->toBe('checkpoint is an opening balance');
+    }
+});
+
+it('classes developer errors under LogicException', function (string $class) {
+    expect(is_a($class, LogicException::class, true))->toBeTrue();
+    expect(is_a($class, JournalException::class, true))->toBeTrue();
+})->with([
+    [InvalidJournalMethod::class],
+    [InvalidJournalEntryValue::class],
+    [InvalidJournalModel::class],
+    [InvalidLedgerType::class],
+    [InvalidTags::class],
+]);
+
+it('classes runtime conditions under RuntimeException', function (string $class) {
+    expect(is_a($class, RuntimeException::class, true))->toBeTrue();
+    expect(is_a($class, JournalException::class, true))->toBeTrue();
+})->with([
+    [JournalAlreadyExists::class],
+    [CurrencyMismatch::class],
+    [PeriodClosed::class],
+    [InvalidCheckpointDate::class],
+    [CheckpointNotRemovable::class],
+    [TransactionGroupNotFound::class],
+    [TransactionCouldNotBeProcessed::class],
+    [DebitsAndCreditsDoNotEqual::class],
+]);
+
+it('treats an unbalanced group as a commit failure', function () {
+    $exception = new DebitsAndCreditsDoNotEqual('credits == 100 and debits == 99');
+
+    expect($exception)->toBeInstanceOf(TransactionCouldNotBeProcessed::class);
+    expect($exception->getPrevious())->toBeNull();
+    expect($exception->getMessage())
+        ->toContain('debits equal credits')
+        ->toContain('credits == 100 and debits == 99');
 });
