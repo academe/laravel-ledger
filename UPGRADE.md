@@ -31,13 +31,136 @@ All other exception class names (`JournalAlreadyExists`,
 `InvalidJournalEntryValue`, `InvalidJournalMethod`,
 `DebitsAndCreditsDoNotEqual`, `TransactionCouldNotBeProcessed`) keep the same
 name and move under `Academe\LaravelJournal\Exceptions`. `CurrencyMismatch`
-is new — see [Behaviour changes](#3-behaviour-changes) below.
+is new — see [Behaviour changes](#4-behaviour-changes) below.
 
 Update your `use` statements accordingly, and add `Concerns\HasJournal` /
 `Concerns\HasJournalTransactions` to any model that previously used the
 `ModelTraits\*` traits.
 
-## 2. Configuration
+## 2. Method-by-method mapping
+
+The tables below map every old public method to its new equivalent. "Old"
+throughout means the precursor package's API.
+
+### Journal initialisation
+
+| Old | New |
+|---|---|
+| `initJournal(?string $currencyCode = 'USD', ?string $ledgerId = null)` | `initJournal(Currency\|string\|null $currency = null, ?int $ledgerId = null)` |
+
+Two breaking differences: the default currency is now
+`config('journal.base_currency')` — `GBP` out of the box — rather than a
+hardcoded `'USD'`, and `$ledgerId` is an `?int` (the ledger's primary key),
+not a string.
+
+### Posting to a journal
+
+| Old | New |
+|---|---|
+| `credit($value, $memo, $postDate, $transactionGroup)` | `credit(Money\|int $value, ?string $memo, ?CarbonInterface $postDate, ?string $transactionGroup)` |
+| `debit($value, ...)` | `debit(...)` — same shape as `credit()` |
+| `creditDollars(float $amount, ...)` | **removed** — pass a `Money`, or an `int` of minor units |
+| `debitDollars(float $amount, ...)` | **removed** — as above |
+
+An `int` value means minor units in the journal's own currency; a `Money`
+value must match the journal currency or `CurrencyMismatch` is thrown.
+
+### Balances
+
+| Old | New |
+|---|---|
+| `getBalance(): Money` | `totalBalance(): Money` — includes future-dated transactions |
+| `getCurrentBalance(): Money` | `currentBalance(): Money` — excludes future-dated transactions |
+| `getBalanceOn(Carbon $date): Money` | `balanceOn(CarbonInterface $date): Money` |
+| `getDebitBalanceOn(Carbon $date): Money` | `debitBalanceOn(CarbonInterface $date): Money` |
+| `getCreditBalanceOn(Carbon $date): Money` | `creditBalanceOn(CarbonInterface $date): Money` |
+| `getDollarsDebitedToday()` / `getDollarsCreditedToday()` | **removed** — use `debitBalanceOn(now())` / `creditBalanceOn(now())` |
+| `getDollarsDebitedOn($date)` / `getDollarsCreditedOn($date)` | **removed** — use `debitBalanceOn($date)` / `creditBalanceOn($date)` |
+| `getCurrentBalanceInDollars(): float` / `getBalanceInDollars(): float` | **removed** — see [Replacing the float helpers](#replacing-the-float-helpers) |
+| `resetCurrentBalances(): Money` | `resetCurrentBalance(): Money` — singular |
+
+The cached `journals.balance` column holds `totalBalance()` (so it includes
+future-dated transactions), and the in-memory model instance is stale
+immediately after posting — read `$journal->fresh()->balance` or call one of
+the balance methods when you need the up-to-date figure.
+
+### Referencing another model from a transaction
+
+| Old | New |
+|---|---|
+| `$transaction->referencesObject($product)` | `$transaction->reference()->associate($product)->save()` |
+| `$transaction->getReferencedObject(): ?Model` | `$transaction->reference` — a standard `MorphTo` relation |
+| `$journal->transactionsReferencingObjectQuery($product)` | read from the referenced side: add `Concerns\HasJournalTransactions` to the model and use `$product->journalTransactions` |
+
+### Ledgers
+
+| Old | New |
+|---|---|
+| `$journal->assignToLedger($ledger): void` | `assignToLedger(Ledger $ledger): self` — now chainable |
+| `$ledger->getCurrentBalance(string $currencyCode): Money` | `$ledger->currentBalance(Currency\|string $currency): Money` |
+| `$ledger->getCurrentBalanceInDollars(): float` | **removed** — see [Replacing the float helpers](#replacing-the-float-helpers) |
+
+### Ledger types
+
+The old `Enums\LedgerType` enum had seven cases and two boolean helpers;
+`Enums\StandardLedgerType` has five cases and expresses the normal balance
+side through the `Contracts\LedgerType` interface instead:
+
+| Old | New |
+|---|---|
+| `asset`, `liability`, `equity`, `expense` cases | same case names and stored values |
+| `revenue` | `income` — same credit-normal semantics, new name and stored value |
+| `gain` | fold into `income`, or define a custom type (see below) |
+| `loss` | fold into `expense`, or define a custom type |
+| `isDebitNormal(): bool` | `normalBalance() === BalanceSide::Debit` |
+| `isCreditNormal(): bool` | `normalBalance() === BalanceSide::Credit` |
+| `LedgerType::values(): array` | `array_column(StandardLedgerType::cases(), 'value')` |
+
+If your `ledgers.type` column holds stored `revenue`, `gain`, or `loss`
+values, either update the rows as part of the data migration
+(`revenue` → `income`, `gain` → `income`, `loss` → `expense`), or keep the
+distinct values by registering your own string-backed enum implementing
+`Contracts\LedgerType` under `config('journal.ledger_types')` — the
+[custom ledger types](docs/ledgers.md#custom-ledger-types) section of the
+ledgers guide shows a gain/loss example.
+
+### Double-entry transaction groups
+
+| Old | New |
+|---|---|
+| `Transaction::newDoubleEntryTransactionGroup(): self` | `TransactionGroup::make(): static` |
+| `addTransaction(Journal, string $method, Money, $memo, $ref, $postdate): void` | `addTransaction(Journal, EntryType\|string $method, Money, ?string $memo, ?Model $reference, ?CarbonInterface $postDate): static` — chainable |
+| `addDollarTransaction(Journal, string, float\|int\|string, ...)` | **removed** — build a `Money` and use `addTransaction()` |
+| `getTransactionsPending(): array` | `pending(): array` |
+| `commit(): string` | `commit(): string` — returns the shared group UUID |
+| *(no equivalent)* | `TransactionGroup::reverse(string $group, ?CarbonInterface $postDate = null): static` — posts the mirror-image of a committed group |
+
+`$method` accepts the `EntryType` enum (`EntryType::Credit` /
+`EntryType::Debit`); the legacy `'credit'` / `'debit'` strings still work.
+
+### Replacing the float helpers
+
+Every float-returning `*Dollars` / `*InDollars` method is removed with no
+direct replacement, deliberately: converting to `float` reintroduces exactly
+the rounding errors that integer-based `Money` arithmetic exists to prevent.
+All amounts in and out of the package are `Money\Money` values.
+
+For display and input, `Academe\LaravelJournal\Support\MoneyFormatter` wraps
+the moneyphp formatter/parser boilerplate:
+
+```php
+use Academe\LaravelJournal\Support\MoneyFormatter;
+
+MoneyFormatter::decimal($journal->currentBalance());   // "1234.56"
+MoneyFormatter::format($journal->currentBalance());    // "£1,234.56" (needs ext-intl)
+MoneyFormatter::parseDecimal('1234.56', 'GBP');        // Money::GBP(123456)
+MoneyFormatter::parse('£1,234.56', 'GBP');             // Money::GBP(123456) (needs ext-intl)
+```
+
+If you genuinely need a raw number, `->getAmount()` on any `Money` returns
+the minor-unit amount as a string.
+
+## 3. Configuration
 
 The config file is renamed and its keys change shape:
 
@@ -54,7 +177,7 @@ Publish the new config and merge across any customisation you had:
 php artisan vendor:publish --tag=journal-config
 ```
 
-## 3. Behaviour changes
+## 4. Behaviour changes
 
 A handful of behaviours changed deliberately as part of the rename — not
 just names:
@@ -87,7 +210,7 @@ just names:
   removed; use `reference()->associate($model)` instead.
 - The empty `Journal::remove()` stub is gone.
 
-## 4. Data migration
+## 5. Data migration
 
 The package's own published migrations (`--tag=journal-migrations`) `CREATE`
 fresh tables — run them only on a **new** installation with no existing
@@ -160,12 +283,11 @@ Only run the missing-index migration for indexes your existing tables don't
 already have — check your current schema first to avoid a duplicate-index
 error.
 
-## 5. Upgrading within academe/laravel-journal: 1.0 → 1.1
+## 6. Upgrading within academe/laravel-journal: 1.0 → 1.1
 
 This section is for existing `academe/laravel-journal` 1.0 users, not for the
 rename above. Version 1.1 adds period checkpoints — see the
-[Checkpoints section](README.md#checkpoints-fast-balances-and-closed-periods)
-in the README for the full feature. The upgrade is almost purely additive:
+[Checkpoints guide](docs/checkpoints.md) for the full feature. The upgrade is almost purely additive:
 no namespaces or class names change, and there is **zero behaviour change**
 until you call `checkpoint()` for the first time. The one signature change:
 

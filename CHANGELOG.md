@@ -3,6 +3,14 @@
 ## 1.1.0 - Unreleased
 
 ### Added
+- `Support\MoneyFormatter`: static helpers converting `Money` values to and
+  from strings without the moneyphp boilerplate. `decimal()` /
+  `parseDecimal()` handle plain decimal strings with no extension
+  requirements; `format()` / `parse()` are locale-aware (currency symbol,
+  digit grouping), default to the application locale, and throw a clear
+  `RuntimeException` when ext-intl is not loaded. The underlying
+  `NumberFormatter` is memoized per locale and style, so formatting a
+  report of hundreds of amounts builds it once.
 - Period checkpoints: `Journal::checkpoint($date)` stores frozen cumulative
   totals; all balance methods start from the nearest checkpoint instead of
   summing full history.

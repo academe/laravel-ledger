@@ -1,5 +1,7 @@
 # Multiple currencies
 
+[← Back to README](../README.md)
+
 How to run more than one currency through `academe/laravel-journal`, and
 how to move value between journals of different currencies — including
 where the exchange-rate gain or loss ends up.
