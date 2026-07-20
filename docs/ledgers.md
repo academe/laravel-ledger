@@ -47,12 +47,12 @@ TransactionGroup::make()
 
 ## C. Ledger-enforced double entry
 
-Assign journals to typed ledgers, and `Ledger::currentBalance()` gives you a
-SQL-aggregated balance across every journal in that ledger. Debit-normal
-types (assets, expenses) report **debit − credit**; credit-normal types
-(liabilities, equity, income) report **credit − debit** — so, kept balanced,
-total assets always equal total liabilities plus equity plus income minus
-expenses:
+Assign journals to typed ledgers, and `Ledger::normalBalanceOn()` gives you
+a SQL-aggregated [normal balance](balances.md) across every journal in that
+ledger. Debit-normal types (assets, expenses) report **debit − credit**;
+credit-normal types (liabilities, equity, income) report **credit − debit**
+— so, kept balanced, total assets always equal total liabilities plus
+equity plus income minus expenses:
 
 ```php
 use Academe\LaravelJournal\Enums\StandardLedgerType;
@@ -74,13 +74,17 @@ TransactionGroup::make()
     ->addTransaction($salesJournal, 'credit', Money::USD(9900))
     ->commit();
 
-$assetsLedger->currentBalance('USD'); // Money::USD(9900)
-$incomeLedger->currentBalance('USD'); // Money::USD(9900)
+$assetsLedger->normalBalanceOn('USD'); // Money::USD(9900)
+$incomeLedger->normalBalanceOn('USD'); // Money::USD(9900)
 ```
 
-`Ledger::currentBalance()` accepts either a currency code string or a
-`Money\Currency` instance, and only sums transactions in that currency —
-mixed-currency journals under the same ledger are kept separate.
+`normalBalanceOn()` takes an optional second date argument (balance at the
+end of that day; null means now). `normalTotalBalance()` sums *all*
+transactions, including future-dated ones. Both accept either a currency
+code string or a `Money\Currency` instance, and only sum transactions in
+that currency — mixed-currency journals under the same ledger are kept
+separate. See [Balances](balances.md) for the full picture, including the
+sign conventions.
 
 ## Custom ledger types
 
@@ -116,7 +120,7 @@ Then append it to the registry in `config/journal.php` (publish with
 
 From there it behaves like any standard type — `Ledger::create(['name' =>
 'Accumulated Depreciation', 'type' => ContraAssetType::CONTRA_ASSET])` —
-and `Ledger::currentBalance()` signs its result from `normalBalance()`
+and the ledger balance methods sign their results from `normalBalance()`
 with no further special-casing.
 
 The same mechanism covers charts of accounts that keep gains and losses

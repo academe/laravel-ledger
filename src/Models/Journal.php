@@ -7,9 +7,11 @@ namespace Academe\LaravelJournal\Models;
 use Academe\LaravelJournal\Casts\CurrencyCast;
 use Academe\LaravelJournal\Casts\MoneyCast;
 use Academe\LaravelJournal\Contracts\NamesJournal;
+use Academe\LaravelJournal\Enums\BalanceSide;
 use Academe\LaravelJournal\Exceptions\CheckpointNotRemovable;
 use Academe\LaravelJournal\Exceptions\CurrencyMismatch;
 use Academe\LaravelJournal\Exceptions\InvalidCheckpointDate;
+use Academe\LaravelJournal\Exceptions\JournalNotInLedger;
 use Academe\LaravelJournal\JournalModels;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
@@ -373,18 +375,49 @@ class Journal extends Model
 
     /**
      * The balance (credit - debit) at the end of the given day.
+     *
+     * A null date means now, excluding future-dated transactions.
      */
-    public function balanceOn(CarbonInterface $date): Money
+    public function balanceOn(?CarbonInterface $date = null): Money
     {
+        $date ??= Carbon::now();
+
         return $this->creditBalanceOn($date)->subtract($this->debitBalanceOn($date));
     }
 
     /**
      * The balance today, excluding future-dated transactions.
+     * A convenience over balanceOn(Carbon::now()).
      */
     public function currentBalance(): Money
     {
-        return $this->balanceOn(Carbon::now());
+        return $this->balanceOn();
+    }
+
+    /**
+     * The balance at the end of the given day (null means now), signed
+     * from the assigned ledger's normal balance side: debit-normal
+     * ledgers report debit - credit, credit-normal report credit - debit.
+     *
+     * @throws JournalNotInLedger when the journal has no ledger to take
+     *                            a normal balance side from
+     */
+    public function normalBalanceOn(?CarbonInterface $date = null): Money
+    {
+        $ledger = $this->ledger;
+
+        if ($ledger === null) {
+            throw new JournalNotInLedger(sprintf(
+                'Journal %d is not assigned to a ledger, so it has no normal balance side.',
+                $this->id,
+            ));
+        }
+
+        $balance = $this->balanceOn($date);
+
+        return $ledger->type->normalBalance() === BalanceSide::Debit
+            ? $balance->multiply(-1)
+            : $balance;
     }
 
     /**

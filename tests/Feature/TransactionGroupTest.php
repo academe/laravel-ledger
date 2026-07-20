@@ -223,8 +223,8 @@ it('keeps ledgers balanced after a group commit', function () {
         ->addTransaction($books->incomeJournal, 'credit', Money::USD($value))
         ->commit();
 
-    expect($books->assetsLedger->currentBalance('USD'))->toEqual(Money::USD($value));
-    expect($books->incomeLedger->currentBalance('USD'))->toEqual(Money::USD($value));
+    expect($books->assetsLedger->normalTotalBalance('USD'))->toEqual(Money::USD($value));
+    expect($books->incomeLedger->normalTotalBalance('USD'))->toEqual(Money::USD($value));
 });
 
 it('keeps ledgers balanced after complex activity', function () {
@@ -241,8 +241,8 @@ it('keeps ledgers balanced after complex activity', function () {
             ->commit();
     }
 
-    expect($books->assetsLedger->currentBalance('USD'))
-        ->toEqual($books->incomeLedger->currentBalance('USD'));
+    expect($books->assetsLedger->normalTotalBalance('USD'))
+        ->toEqual($books->incomeLedger->normalTotalBalance('USD'));
 });
 
 it('rejects numerically balanced but cross-currency groups', function () {

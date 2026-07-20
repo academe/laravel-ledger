@@ -29,7 +29,8 @@ Throwable (PHP)
     │   ├── InvalidJournalEntryValue
     │   ├── InvalidJournalModel
     │   ├── InvalidLedgerType
-    │   └── InvalidTags
+    │   ├── InvalidTags
+    │   └── JournalNotInLedger
     └── JournalRuntimeException (abstract, extends RuntimeException)
         ├── JournalAlreadyExists
         ├── CurrencyMismatch
@@ -55,6 +56,7 @@ Throwable (PHP)
 | `CheckpointNotRemovable` | `removeCheckpointsSince()` would delete an opening-balance checkpoint | |
 | `InvalidLedgerType` | a stored ledger type code matches no registered enum, or a ledger is given a case from an unregistered enum | |
 | `InvalidTags` | transaction tags are not a flat map of string keys to scalar values | |
+| `JournalNotInLedger` | `Journal::normalBalanceOn()` is called on a journal with no assigned ledger | |
 | `InvalidJournalModel` | a `models.*` config override does not extend the package model it replaces | |
 
 Where an exception carries structured properties (all public and

@@ -13,6 +13,7 @@ use Academe\LaravelJournal\Exceptions\InvalidLedgerType;
 use Academe\LaravelJournal\Exceptions\InvalidTags;
 use Academe\LaravelJournal\Exceptions\JournalAlreadyExists;
 use Academe\LaravelJournal\Exceptions\JournalException;
+use Academe\LaravelJournal\Exceptions\JournalNotInLedger;
 use Academe\LaravelJournal\Exceptions\PeriodClosed;
 use Academe\LaravelJournal\Exceptions\TransactionCouldNotBeProcessed;
 use Academe\LaravelJournal\Exceptions\TransactionGroupNotFound;
@@ -30,6 +31,7 @@ it('extends JournalException with a default message', function (string $class, s
     [DebitsAndCreditsDoNotEqual::class, 'debits equal credits'],
     [TransactionCouldNotBeProcessed::class, 'could not be processed'],
     [InvalidCheckpointDate::class, 'after the latest'],
+    [JournalNotInLedger::class, 'not assigned to a ledger'],
 ]);
 
 it('appends detail to the unbalanced-group message', function () {
@@ -87,6 +89,7 @@ it('classes developer errors under LogicException', function (string $class) {
     [InvalidJournalModel::class],
     [InvalidLedgerType::class],
     [InvalidTags::class],
+    [JournalNotInLedger::class],
 ]);
 
 it('classes runtime conditions under RuntimeException', function (string $class) {

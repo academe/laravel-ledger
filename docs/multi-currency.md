@@ -27,7 +27,7 @@ The package's rules, stated once:
   `debit EUR 100`) is rejected with `DebitsAndCreditsDoNotEqual`; a
   group containing several currencies commits when each balances
   independently.
-- **Reporting is per currency.** `Ledger::currentBalance('USD')` sums
+- **Reporting is per currency.** `Ledger::normalBalanceOn('USD')` sums
   only USD journals; nothing ever adds amounts across currencies.
 - **The package knows nothing about exchange rates.** Rates are
   volatile market data, not bookkeeping; they stay in your application
@@ -187,7 +187,7 @@ it already provides:
 - Sweep targets (`fxGains`, `fxLosses`, `fxUnrealised`) belong in
   **income**/**expense** ledgers.
 
-That keeps `Ledger::currentBalance($currency)` truthful throughout:
+That keeps `Ledger::normalBalanceOn($currency)` truthful throughout:
 every currency's accounting equation holds at every step.
 
 ## Scaling to many currencies

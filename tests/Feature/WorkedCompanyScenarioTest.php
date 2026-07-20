@@ -24,11 +24,11 @@ use Money\Money;
  */
 function expectBooksToBalance(object $books): void
 {
-    $assets = $books->assets->currentBalance('GBP');
-    $liabilities = $books->liabilities->currentBalance('GBP');
-    $equity = $books->equity->currentBalance('GBP');
-    $income = $books->income->currentBalance('GBP');
-    $expenses = $books->expenses->currentBalance('GBP');
+    $assets = $books->assets->normalTotalBalance('GBP');
+    $liabilities = $books->liabilities->normalTotalBalance('GBP');
+    $equity = $books->equity->normalTotalBalance('GBP');
+    $income = $books->income->normalTotalBalance('GBP');
+    $expenses = $books->expenses->normalTotalBalance('GBP');
 
     expect($assets)->toEqual(
         $liabilities->add($equity)->add($income)->subtract($expenses),
@@ -134,11 +134,11 @@ it('keeps the accounting equation balanced through a month of trading', function
         ->and($books->sales->currentBalance())->toEqual(Money::GBP(250_000));
 
     // ...and ledger by ledger, signed by each type's normal balance side.
-    expect($books->assets->currentBalance('GBP'))->toEqual(Money::GBP(1_500_000))
-        ->and($books->liabilities->currentBalance('GBP'))->toEqual(Money::GBP(450_000))
-        ->and($books->equity->currentBalance('GBP'))->toEqual(Money::GBP(1_000_000))
-        ->and($books->income->currentBalance('GBP'))->toEqual(Money::GBP(250_000))
-        ->and($books->expenses->currentBalance('GBP'))->toEqual(Money::GBP(200_000));
+    expect($books->assets->normalTotalBalance('GBP'))->toEqual(Money::GBP(1_500_000))
+        ->and($books->liabilities->normalTotalBalance('GBP'))->toEqual(Money::GBP(450_000))
+        ->and($books->equity->normalTotalBalance('GBP'))->toEqual(Money::GBP(1_000_000))
+        ->and($books->income->normalTotalBalance('GBP'))->toEqual(Money::GBP(250_000))
+        ->and($books->expenses->normalTotalBalance('GBP'))->toEqual(Money::GBP(200_000));
 
     // Period end: close income and expenses to retained earnings.
     TransactionGroup::make()
@@ -155,13 +155,13 @@ it('keeps the accounting equation balanced through a month of trading', function
     // Income and expenses now stand at zero, the £500 profit sits in
     // equity, and the closed-form equation holds:
     // assets = liabilities + equity.
-    expect($books->income->currentBalance('GBP'))->toEqual(Money::GBP(0))
-        ->and($books->expenses->currentBalance('GBP'))->toEqual(Money::GBP(0))
+    expect($books->income->normalTotalBalance('GBP'))->toEqual(Money::GBP(0))
+        ->and($books->expenses->normalTotalBalance('GBP'))->toEqual(Money::GBP(0))
         ->and($books->retainedEarnings->currentBalance())->toEqual(Money::GBP(50_000))
-        ->and($books->equity->currentBalance('GBP'))->toEqual(Money::GBP(1_050_000))
-        ->and($books->assets->currentBalance('GBP'))->toEqual(
-            $books->liabilities->currentBalance('GBP')
-                ->add($books->equity->currentBalance('GBP')),
+        ->and($books->equity->normalTotalBalance('GBP'))->toEqual(Money::GBP(1_050_000))
+        ->and($books->assets->normalTotalBalance('GBP'))->toEqual(
+            $books->liabilities->normalTotalBalance('GBP')
+                ->add($books->equity->normalTotalBalance('GBP')),
         );
 
     expectBooksToBalance($books);

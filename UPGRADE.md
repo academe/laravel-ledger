@@ -97,7 +97,7 @@ the balance methods when you need the up-to-date figure.
 | Old | New |
 |---|---|
 | `$journal->assignToLedger($ledger): void` | `assignToLedger(Ledger $ledger): self` — now chainable |
-| `$ledger->getCurrentBalance(string $currencyCode): Money` | `$ledger->currentBalance(Currency\|string $currency): Money` |
+| `$ledger->getCurrentBalance(string $currencyCode): Money` | `$ledger->normalTotalBalance(Currency\|string $currency): Money` — same all-time sum; `normalBalanceOn($currency, $date = null)` for a date-bounded normal balance; `currentBalance()` remains as a deprecated alias |
 | `$ledger->getCurrentBalanceInDollars(): float` | **removed** — see [Replacing the float helpers](#replacing-the-float-helpers) |
 
 ### Ledger types

@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `Journal::normalBalanceOn(?CarbonInterface $date = null)`: the journal's
+  balance signed from its assigned ledger's normal balance side — an
+  accountant-readable single-journal balance without summing the whole
+  ledger. Throws the new `JournalNotInLedger` (a `JournalLogicException`)
+  when the journal has no ledger to take a normal balance side from.
+- `Journal::balanceOn()` now accepts a null date (the default), meaning
+  now — so `balanceOn()` equals `currentBalance()`.
+- `Ledger::normalBalanceOn(Currency|string $currency, ?CarbonInterface
+  $date = null)`: the ledger's normal balance at the end of the given day
+  (null means now, excluding future-dated transactions).
+- `Ledger::normalTotalBalance($currency)`: the all-time normal balance,
+  including future-dated transactions — what `currentBalance()` computed.
+- A new [Balances](docs/balances.md) doc page explaining the two sign
+  conventions: journal balances are neutral (credit − debit, always);
+  ledger balances are normal balances signed from the ledger type.
+
+### Deprecated
+- `Ledger::currentBalance()`, renamed `normalTotalBalance()`: every ledger
+  balance is a normal balance, and the old name never carried the
+  bounded-to-now meaning that `Journal::currentBalance()` has. The alias
+  remains until 2.0.
+
 ## 1.1.0 - Unreleased
 
 ### Added

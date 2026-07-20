@@ -179,8 +179,9 @@ each.
 
 Focused guides live under [docs/](docs/):
 
-- [Balances](docs/balances.md) — the balance methods, and the staleness of
-  the cached column after posting.
+- [Balances](docs/balances.md) — how balances are calculated at journal
+  and ledger level (the two sign conventions), the balance methods, and
+  the staleness of the cached column after posting.
 - [Formatting and parsing amounts](docs/money-formatting.md) — the
   `MoneyFormatter` helper: `Money` to string and back, plain or
   locale-aware.
